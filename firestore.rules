@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Contact Submissions
+    match /contactSubmissions/{submissionId} {
+      allow create: if request.resource.data.name is string 
+                    && request.resource.data.name.size() > 0 
+                    && request.resource.data.name.size() <= 150
+                    && request.resource.data.phone is string 
+                    && request.resource.data.phone.size() <= 50
+                    && request.resource.data.message is string 
+                    && request.resource.data.message.size() <= 5000;
+      allow read, update, delete: if isSignedIn();
+    }
+
+    // Orders from checkout
+    match /orders/{orderId} {
+      allow create: if request.resource.data.orderId is string
+                    && request.resource.data.orderId.size() <= 100
+                    && request.resource.data.customerName is string
+                    && request.resource.data.customerName.size() <= 150
+                    && request.resource.data.amount is number;
+      allow read, update, delete: if isSignedIn();
+    }
+
+    // Global application data (IGNOU notes, Services rate cards)
+    match /appData/{docId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Educational levels
+    match /levels/{levelId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
+    // Public tool usage counters
+    match /stats/{statId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if isSignedIn();
+    }
+
+    // Connectivity test probe
+    match /test/{testId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+  }
+}

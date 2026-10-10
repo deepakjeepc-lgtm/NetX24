@@ -1,0 +1,83 @@
+{
+  "entities": {
+    "ContactSubmission": {
+      "title": "Contact Submission",
+      "description": "Messages submitted from contact form",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Customer name" },
+        "phone": { "type": "string", "description": "Customer phone number" },
+        "message": { "type": "string", "description": "Inquiry message" },
+        "timestamp": { "type": "string", "description": "Server submission timestamp" }
+      },
+      "required": ["name", "phone", "message"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Orders placed by customers",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string", "description": "Unique order ID" },
+        "paymentId": { "type": "string", "description": "Payment transaction ID" },
+        "customerName": { "type": "string", "description": "Customer name" },
+        "customerPhone": { "type": "string", "description": "Customer phone" },
+        "itemName": { "type": "string", "description": "Product or note name" },
+        "itemType": { "type": "string", "description": "Service or IGNOU Notes" },
+        "amount": { "type": "number", "description": "Order total in INR" },
+        "status": { "type": "string", "description": "Order payment status" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["orderId", "customerName", "customerPhone", "itemName", "amount", "status"]
+    },
+    "AppData": {
+      "title": "Application Data",
+      "description": "Global application data such as IGNOU notes and services rate card",
+      "type": "object",
+      "properties": {
+        "assignments": { "type": "array", "description": "IGNOU assignments list" },
+        "projects": { "type": "array", "description": "IGNOU projects list" },
+        "levels": { "type": "array", "description": "IGNOU levels list" },
+        "items": { "type": "array", "description": "Services list" }
+      }
+    },
+    "Stats": {
+      "title": "Usage Statistics",
+      "description": "Aggregated counter stats such as tools used count",
+      "type": "object",
+      "properties": {
+        "count": { "type": "number", "description": "Usage counter" }
+      }
+    },
+    "Level": {
+      "title": "Level Data",
+      "description": "Educational levels and course metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Level ID" },
+        "name": { "type": "string", "description": "Level name" }
+      }
+    }
+  },
+  "firestore": {
+    "/contactSubmissions/{submissionId}": {
+      "schema": "ContactSubmission",
+      "description": "Submissions from users inquiring about services"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer orders and payment records"
+    },
+    "/appData/{docId}": {
+      "schema": "AppData",
+      "description": "Configurable site content like services and IGNOU database"
+    },
+    "/stats/{statId}": {
+      "schema": "Stats",
+      "description": "System counter documents for public tools"
+    },
+    "/levels/{levelId}": {
+      "schema": "Level",
+      "description": "Course levels"
+    }
+  }
+}

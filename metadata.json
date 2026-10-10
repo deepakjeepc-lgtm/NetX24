@@ -1,0 +1,6 @@
+{
+  "name": "NetX24 Cyber Cafe",
+  "description": "A modern web application for a local cyber cafe featuring printing services, rates, and 100% private, client-side PDF and image processing tools. Includes an AI Assistant for instant help.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
