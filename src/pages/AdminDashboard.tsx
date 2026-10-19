@@ -145,33 +145,33 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] dark:bg-[#0A0A0C] text-[#111111] dark:text-[#F5F5F7]">
+    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-[#FAFAFA] dark:bg-[#0A0A0C] text-[#111111] dark:text-[#F5F5F7]">
       {/* Top Bar */}
-      <header className="border-b border-[#E5E5E0] dark:border-[#222227] bg-[#FFFFFF] dark:bg-[#111114]">
-        <div className="max-w-[1440px] mx-auto px-6 md:px-12 h-20 flex items-center justify-between gap-8">
-          <div className="flex items-center gap-6">
+      <header className="sticky top-0 z-[100] pt-[env(safe-area-inset-top)] border-b border-[#E5E5E0] dark:border-[#222227] bg-[#FAFAFA] dark:bg-[#0A0A0C]">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-6">
+          <div className="flex items-center gap-3 sm:gap-6 shrink-0">
             <Link to="/" className="shrink-0">
               <LekhixLogo size="sm" />
             </Link>
-            <span className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-400 hidden sm:inline">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-zinc-400 hidden lg:inline">
               Curator Console
             </span>
           </div>
 
-          <nav className="flex items-center gap-6 text-xs font-bold uppercase tracking-[0.18em]">
+          <nav className="flex items-center gap-3 sm:gap-6 text-[11px] sm:text-xs font-bold uppercase tracking-[0.14em] sm:tracking-[0.18em] overflow-x-auto hide-scrollbar">
             <button
               onClick={() => setActiveTab('catalog')}
-              className={`py-2 border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+              className={`py-2 border-b-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === 'catalog'
                   ? 'border-[#111111] dark:border-white text-[#111111] dark:text-white'
                   : 'border-transparent text-zinc-400 hover:text-[#111111] dark:hover:text-white'
               }`}
             >
-              Catalog (6×9)
+              Catalog
             </button>
             <button
               onClick={() => setActiveTab('orders')}
-              className={`py-2 border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+              className={`py-2 border-b-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === 'orders'
                   ? 'border-[#111111] dark:border-white text-[#111111] dark:text-white'
                   : 'border-transparent text-zinc-400 hover:text-[#111111] dark:hover:text-white'
@@ -181,7 +181,7 @@ export default function AdminDashboard() {
             </button>
             <button
               onClick={() => setActiveTab('inquiries')}
-              className={`py-2 border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+              className={`py-2 border-b-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                 activeTab === 'inquiries'
                   ? 'border-[#111111] dark:border-white text-[#111111] dark:text-white'
                   : 'border-transparent text-zinc-400 hover:text-[#111111] dark:hover:text-white'
@@ -191,7 +191,7 @@ export default function AdminDashboard() {
             </button>
           </nav>
 
-          <div className="flex items-center gap-4 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-4 shrink-0">
             <ThemeToggle />
             <Link
               to="/"
@@ -211,7 +211,7 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      <main className="max-w-[1440px] mx-auto px-6 md:px-12 py-10">
+      <main className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-12 py-8 sm:py-10">
         {activeTab === 'catalog' && <CatalogManager />}
         {activeTab === 'orders' && <OrdersView />}
         {activeTab === 'inquiries' && <ContactSubmissions />}

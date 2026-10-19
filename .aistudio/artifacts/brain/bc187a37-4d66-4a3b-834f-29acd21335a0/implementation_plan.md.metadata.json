@@ -1,6 +1,6 @@
 {
-  "summary": "Implementation plan for adding eBook (PDF) support to LEKHIX Admin Console, Editorial Book Detail View, and Checkout PDF Download flow while preserving the existing storefront layout.",
-  "updatedAt": "2026-10-19T06:06:41.819829773Z",
+  "summary": "Implementation plan for fixing PWA Light/Dark status bar background, locking mobile horizontal overflow, redesigning the mobile home screen with a compact side-by-side Hero so the 2-column grid appears above the fold, fixing the mobile Cart drawer blank screen, and setting eBook (PDF) as the default book format with per-book Physical / eBook / Both support.",
+  "updatedAt": "2026-10-19T08:11:50.144293038Z",
   "requestFeedback": true,
   "userFacing": true
 }

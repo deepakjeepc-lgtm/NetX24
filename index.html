@@ -2,21 +2,69 @@
 <html lang="en" class="scroll-smooth bg-[#FAFAFA] dark:bg-[#0A0A0C]">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="description" content="LEKHIX — Luxury Editorial Books & Architectural Stationery Store. Curated 6×9 trade editions, monographs, and precision writing instruments.">
-    <meta property="og:title" content="LEKHIX — Books & Stationery">
-    <meta property="og:description" content="LEKHIX — Luxury Editorial Books & Architectural Stationery Store. Curated 6×9 trade editions, monographs, and precision writing instruments.">
-
-    <meta name="theme-color" content="#FAFAFA" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-    <link rel="icon" type="image/svg+xml" href="/icon.svg">
-    <link rel="manifest" href="/manifest.json">
-    <title>LEKHIX — Books &amp; Stationery</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>LEKHIX — Luxury Editorial Books &amp; Architectural Stationery</title>
+    <meta
+      name="description"
+      content="LEKHIX — Luxury Editorial Books &amp; Architectural Stationery Store. Curated 6×9 trade editions, digital eBooks (PDF), monographs, and precision writing instruments."
+    />
+    <meta
+      property="og:title"
+      content="LEKHIX — Luxury Editorial Books &amp; Architectural Stationery"
+    />
+    <meta
+      property="og:description"
+      content="LEKHIX — Luxury Editorial Books &amp; Architectural Stationery Store. Curated 6×9 trade editions, digital eBooks (PDF), monographs, and precision writing instruments."
+    />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#FAFAFA" id="lekhix-theme-color" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="LEKHIX" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('theme');
+          var prefersDark =
+            window.matchMedia &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var isDark = saved === 'dark' || (!saved && prefersDark);
+          var bg = isDark ? '#0A0A0C' : '#FAFAFA';
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.colorScheme = 'dark';
+          } else {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.style.colorScheme = 'light';
+          }
+          document.documentElement.style.backgroundColor = bg;
+          var oldMetas = document.querySelectorAll('meta[name="theme-color"]');
+          for (var i = 0; i < oldMetas.length; i++) {
+            oldMetas[i].parentNode.removeChild(oldMetas[i]);
+          }
+          var meta = document.createElement('meta');
+          meta.setAttribute('name', 'theme-color');
+          meta.setAttribute('content', bg);
+          meta.setAttribute('id', 'lekhix-theme-color');
+          document.head.appendChild(meta);
+        } catch (e) {}
+      })();
+    </script>
   </head>
-  <body class="bg-[#FAFAFA] dark:bg-[#0A0A0C] text-[#111111] dark:text-[#F5F5F7] m-0 p-0 overflow-x-hidden antialiased">
+  <body class="bg-[#FAFAFA] dark:bg-[#0A0A0C] text-[#111111] dark:text-[#F5F5F7] antialiased selection:bg-[#111111] selection:text-[#FAFAFA] dark:selection:bg-[#F5F5F7] dark:selection:text-[#0A0A0C] overflow-x-hidden">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

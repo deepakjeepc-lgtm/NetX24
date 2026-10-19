@@ -3,7 +3,7 @@ import { db } from '../lib/firebase';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrors';
 
-export type BookFormat = 'physical' | 'ebook' | 'both';
+export type BookFormat = 'ebook' | 'physical' | 'both';
 
 export interface ProductSpecs {
   author: string;
@@ -34,7 +34,7 @@ export interface CatalogItem {
   description: string;
   specs: ProductSpecs;
   previewPages?: PreviewPage[];
-  /** For Books: whether sold as Physical hardcover, Digital eBook (PDF), or Both */
+  /** For Books: 'ebook' (default PDF only), 'physical' (6x9 hardcover only), or 'both' */
   bookFormat?: BookFormat;
   /** Price in INR for the eBook (PDF) edition when bookFormat is 'ebook' or 'both' */
   ebookPrice?: number;
@@ -54,15 +54,24 @@ export function getEffectivePrice(
   product: CatalogItem,
   selectedFormat: 'physical' | 'ebook' = 'physical'
 ): number {
-  if (
-    product.category === 'Books' &&
-    selectedFormat === 'ebook' &&
-    typeof product.ebookPrice === 'number' &&
-    product.ebookPrice > 0
-  ) {
-    return product.ebookPrice;
+  if (product.category === 'Books' && selectedFormat === 'ebook') {
+    if (typeof product.ebookPrice === 'number' && product.ebookPrice > 0) {
+      return product.ebookPrice;
+    }
+    return Number(product.price) || 0;
   }
-  return Number(product.price);
+  return Number(product.price) || 0;
+}
+
+export function getDefaultSelectedFormat(
+  product: CatalogItem
+): 'physical' | 'ebook' {
+  if (product.category === 'Books') {
+    const mode = product.bookFormat || 'ebook';
+    if (mode === 'ebook') return 'ebook';
+    return 'physical';
+  }
+  return 'physical';
 }
 
 export const INITIAL_CATALOG: CatalogItem[] = [
@@ -114,9 +123,7 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     title: 'The Architecture of Silence',
     category: 'Books',
     price: 1850,
-    bookFormat: 'both',
-    ebookPrice: 790,
-    ebookFileName: 'The_Architecture_of_Silence_LEKHIX_Edition.pdf',
+    bookFormat: 'physical',
     image: '/catalog/book-architecture.png?v=4',
     featured: true,
     description:
@@ -150,11 +157,11 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     id: 'book-modern-typography',
     title: 'Forms of Modern Typography',
     category: 'Books',
-    price: 1650,
-    originalPrice: 1950,
-    bookFormat: 'both',
+    price: 720,
+    originalPrice: 950,
+    bookFormat: 'ebook',
     ebookPrice: 720,
-    ebookFileName: 'Forms_of_Modern_Typography_LEKHIX_Edition.pdf',
+    ebookFileName: 'Forms_of_Modern_Typography_LEKHIX_eBook.pdf',
     image: '/catalog/book-typography.png?v=4',
     featured: true,
     description:
@@ -163,8 +170,8 @@ export const INITIAL_CATALOG: CatalogItem[] = [
       author: 'Emil Ruder & Clara Vance',
       publisher: 'LEKHIX Editions',
       releaseDate: 'October 2026',
-      format: '6 × 9 in',
-      features: 'Smyth-sewn hardcover, 288 pages',
+      format: '6 × 9 in · PDF Edition',
+      features: 'Digital PDF Edition, 288 pages',
       language: 'English',
       isbn: '978-3-89955-819-7',
       reviewerName: 'Marcus Weber',
@@ -290,9 +297,7 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     title: 'The Nocturnal Botanical Index',
     category: 'Books',
     price: 1720,
-    bookFormat: 'both',
-    ebookPrice: 750,
-    ebookFileName: 'The_Nocturnal_Botanical_Index_LEKHIX_Edition.pdf',
+    bookFormat: 'physical',
     image: '/catalog/book-botanical.png?v=4',
     featured: false,
     description:
@@ -353,7 +358,7 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     id: 'book-quiet-geometry',
     title: 'Quiet Geometry in Print',
     category: 'Books',
-    price: 1540,
+    price: 590,
     bookFormat: 'ebook',
     ebookPrice: 590,
     ebookFileName: 'Quiet_Geometry_in_Print_LEKHIX_eBook.pdf',
@@ -397,26 +402,74 @@ interface CatalogContextType {
 
 const CatalogContext = createContext<CatalogContextType | undefined>(undefined);
 
-const CART_STORAGE_KEY = 'lekhix_cart_v1';
+const CART_STORAGE_KEY = 'lekhix_cart_v2';
 
 function normalizeCatalogItems(items: CatalogItem[]): CatalogItem[] {
-  return items.map((item) => {
-    if (item.category === 'Books') {
-      const bookFormat: BookFormat = item.bookFormat || 'both';
-      const ebookPrice =
-        typeof item.ebookPrice === 'number' && item.ebookPrice > 0
-          ? item.ebookPrice
-          : bookFormat === 'ebook'
-          ? item.price
-          : Math.round(item.price * 0.45);
+  const defaultMap = new Map(INITIAL_CATALOG.map((i) => [i.id, i]));
+  return items
+    .filter((item) => item && typeof item.title === 'string')
+    .map((item) => {
+      const seedMatch = defaultMap.get(item.id);
+      const safeSpecs: ProductSpecs = {
+        author: item.specs?.author || seedMatch?.specs.author || 'LEKHIX Editions',
+        publisher: item.specs?.publisher || seedMatch?.specs.publisher || 'LEKHIX Press',
+        releaseDate: item.specs?.releaseDate || seedMatch?.specs.releaseDate || '2026',
+        format: item.specs?.format || seedMatch?.specs.format || '6 × 9 in',
+        features: item.specs?.features || seedMatch?.specs.features || 'Archival Edition',
+        language: item.specs?.language || seedMatch?.specs.language || 'English',
+        isbn: item.specs?.isbn || seedMatch?.specs.isbn || '978-3-89955-000-0',
+        reviewerName: item.specs?.reviewerName ?? seedMatch?.specs.reviewerName,
+        reviewerQuote: item.specs?.reviewerQuote ?? seedMatch?.specs.reviewerQuote,
+      };
+
+      if (item.category === 'Books') {
+        const bookFormat: BookFormat =
+          item.bookFormat || seedMatch?.bookFormat || 'ebook';
+        const ebookPrice =
+          typeof item.ebookPrice === 'number' && item.ebookPrice > 0
+            ? item.ebookPrice
+            : bookFormat === 'ebook'
+            ? Number(item.price)
+            : seedMatch?.ebookPrice || Math.round(Number(item.price) * 0.45);
+        return {
+          ...item,
+          specs: safeSpecs,
+          bookFormat,
+          ebookPrice,
+        };
+      }
       return {
         ...item,
-        bookFormat,
-        ebookPrice,
+        specs: safeSpecs,
       };
+    });
+}
+
+function sanitizeStoredCart(raw: unknown): CartItem[] {
+  if (!Array.isArray(raw)) return [];
+  const valid: CartItem[] = [];
+  for (const entry of raw) {
+    if (
+      entry &&
+      typeof entry === 'object' &&
+      entry.product &&
+      typeof entry.product.id === 'string' &&
+      typeof entry.product.title === 'string'
+    ) {
+      const normalizedProduct = normalizeCatalogItems([entry.product])[0];
+      if (normalizedProduct) {
+        valid.push({
+          product: normalizedProduct,
+          quantity: Math.max(1, Number(entry.quantity) || 1),
+          selectedFormat:
+            entry.selectedFormat === 'ebook'
+              ? 'ebook'
+              : getDefaultSelectedFormat(normalizedProduct),
+        });
+      }
     }
-    return item;
-  });
+  }
+  return valid;
 }
 
 export function CatalogProvider({ children }: { children: ReactNode }) {
@@ -426,12 +479,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     try {
       const saved = localStorage.getItem(CART_STORAGE_KEY);
       if (!saved) return [];
-      const parsed = JSON.parse(saved);
-      if (!Array.isArray(parsed)) return [];
-      return parsed.map((c: any) => ({
-        ...c,
-        selectedFormat: c.selectedFormat === 'ebook' ? 'ebook' : 'physical',
-      }));
+      return sanitizeStoredCart(JSON.parse(saved));
     } catch {
       return [];
     }
@@ -487,10 +535,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     selectedFormat?: 'physical' | 'ebook'
   ) => {
     const format: 'physical' | 'ebook' =
-      selectedFormat ||
-      (product.category === 'Books' && product.bookFormat === 'ebook'
-        ? 'ebook'
-        : 'physical');
+      selectedFormat || getDefaultSelectedFormat(product);
 
     setCart((prev) => {
       const existingIndex = prev.findIndex(

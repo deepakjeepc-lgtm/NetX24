@@ -1,108 +1,96 @@
-# LEKHIX — eBook (PDF) Edition & Instant Download Integration
+# LEKHIX — Mobile PWA Polish, Status Bar Theme Sync, Cart Fix & Per-Book Format Control
 
-Enable **LEKHIX** to sell downloadable **eBooks in PDF format** alongside physical 6×9 hardcover editions while keeping the storefront layout, card design, and navigation completely unchanged.
+Resolve all mobile/PWA experience issues shown in your screenshots and configure flexible per-book edition formats (`eBook Only` by default, `Physical Only`, or `Both`).
 
 ---
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> The following product decisions reflect your confirmed choices from our clarification step:
+> The following decisions incorporate your screenshots and confirmed preferences:
 
-- **Confirmed Decision 1 — Keep Storefront Tabs & Add Format Selector Inside Book Details + Admin Filter**: The storefront navigation remains strictly **All Products · Books · Stationery · Bookshelf** with zero visual clutter. Inside the **Admin Console**, curators get both an **eBooks** filter tab (`All | Books | eBooks | Stationery`) and a **Book Format Selector** (`Physical Hardcover`, `eBook (PDF)`, or `Both Physical & eBook`) when adding or editing any book. Inside the **Book Detail View**, books with eBook availability show a clean format toggle (`PHYSICAL 6×9` / `EBOOK PDF`).
-- **Confirmed Decision 2 — Dual PDF Attachment in Admin Console (Upload + URL)**: When `eBook (PDF)` or `Both` is selected in the Admin editor, the curator can either **upload a `.pdf` file directly** from their device or **paste an external PDF URL link** (plus an optional custom eBook price). If an eBook has no external file attached, the system can also generate a formatted 6×9 digital edition PDF on the fly so downloads never fail.
-- **Confirmed Decision 3 — Instant PDF Download Unlocked After Checkout Confirmation**: Customers purchase eBooks through the same luxury Checkout flow; once payment/order confirmation completes, an instant **Download eBook (PDF)** button unlocks immediately in the confirmation drawer alongside the official receipt.
+- **Confirmed Decision 1 — Compact Side-by-Side Mobile Hero (Products Above the Fold)**: On mobile screens, the Hero section will arrange the `6×9` shadowed book cover and the title/synopsis/Buy CTA **side-by-side** in a compact editorial layout so the category filter bar (`All Products · Books · Stationery`) and the **2-column product grid** appear immediately above the fold on the home screen.
+- **Confirmed Decision 2 — Per-Book Edition Type with `eBook (PDF)` as Default**: When adding a book in the Admin Console, **`eBook Only (PDF)`** is selected by default. The admin can set any individual book to **`eBook Only (PDF)`**, **`Physical Only (6×9 Hardcover)`**, or **`Both (Physical + eBook PDF)`**—and the storefront will strictly show only the format(s) enabled for that specific book.
+- **Confirmed Decision 3 — Native Dark/Light Status Bar, Zero Left-Right Scroll & Cart Fix**:
+  - **Status Bar**: Configure iOS/Android PWA status bar and safe-area top inset (`viewport-fit=cover` + `black-translucent` + synced `<meta name="theme-color">` and root/header background `#FAFAFA` in Light Mode, `#0A0A0C` in Dark Mode) so the top status bar is dark in Dark Mode and light in Light Mode.
+  - **Zero Horizontal Scroll**: Fix the header button overflow (`CART (0)` clipping on 375px–390px screens) and enforce strict `overflow-x: hidden` and `max-w-[100vw]` across `html`, `body`, and `#root`.
+  - **Mobile Cart Drawer Fix**: Prevent any crash from malformed `localStorage` cart entries and redesign the mobile Cart view with a clear header, structured item cards (or a framed empty-bag card with a **"Continue Browsing Collection"** CTA), and pinned bottom checkout actions so clicking `CART` never shows a blank white screen.
 
 ---
 
 ## 1. Overview & Core Concept
 
-- **What It Does**: Extends the LEKHIX Books & Stationery platform so any book in the catalog can be offered as a **Physical 6×9 Edition**, a **Digital eBook (PDF)**, or **Both**.
-- **Target Audience / Persona**:
-  - **Store Curator (Admin)**: Needs a fast way in the Admin Console to mark a book as Physical or eBook (PDF), upload a PDF file or paste a PDF link, set its eBook price, and filter digital titles.
-  - **Reader / Collector (Customer)**: Wants to choose between the physical 6×9 hardcover or the instant PDF eBook edition on the book's detail page and immediately download their purchased `.pdf` upon order confirmation.
-- **Key Value**: Adds full digital publishing and instant PDF delivery without altering the minimalist 4-column storefront grid or 6×9 visual aesthetic.
+- **What It Does**: Transforms the mobile and installed Home Screen (PWA) experience of **LEKHIX** into a native-feeling luxury book & eBook app while giving the Admin full per-book control over whether a title is an **eBook (PDF)**, a **Physical 6×9 Book**, or **Both**.
+- **Key Fixes Delivered**:
+  1. **Dynamic Light / Dark Status Bar Background**: Eliminates the white strip behind the clock/5G icons in Dark Mode.
+  2. **Zero Horizontal Scroll in Mobile / PWA**: Fits the entire top navigation bar comfortably inside mobile screens (`320px–430px`) and locks horizontal panning.
+  3. **Polished App-Like Mobile Home Screen**: Replaces the oversized stacked mobile hero with a balanced side-by-side 6×9 showcase so customers immediately see the catalog grid upon opening the app.
+  4. **Resilient Mobile Cart Drawer**: Fixes the blank white screen when tapping `CART (0)` on mobile.
+  5. **Per-Book Format Architecture (`eBook` Default)**: Defaults new books to `eBook (PDF)` while supporting `Physical Only` and `Both` per book across the catalog.
 
 ---
 
 ## 2. User Experience & Visual Design
 
-### Key User Flows
+### 1. Status Bar & Safe-Area Theme Synchronization
+- In `index.html` and `ThemeContext.tsx`:
+  - Add `viewport-fit=cover` to the viewport meta tag and set `apple-mobile-web-app-status-bar-style` to `black-translucent`.
+  - Add safe-area top padding (`pt-[env(safe-area-inset-top)]`) to the sticky `<header>` and dynamically sync `document.documentElement.style.backgroundColor`, `document.body.style.backgroundColor`, and `<meta name="theme-color">` between `#FAFAFA` (Light Mode) and `#0A0A0C` (Dark Mode).
 
-1. **Admin Console — Adding / Editing an eBook (PDF)**:
-   - In **Curator Console → Catalog (6×9)**, the filter bar displays `All`, `Books`, `eBooks`, and `Stationery`.
-   - When adding or editing a `Books` item, a **Book Edition Type** selector appears:
-     - `Physical Only (6×9 Hardcover)`
-     - `eBook Only (PDF Download)`
-     - `Both (Physical + eBook PDF)`
-   - When `eBook Only` or `Both` is selected, the **eBook PDF Delivery** panel appears with:
-     - **eBook Price (₹ INR)**: Defaults to the book's price (or allows a lower digital price when `Both` is offered).
-     - **Upload PDF File**: Direct `.pdf` file picker (`accept="application/pdf"`) that stores the uploaded PDF and displays the attached filename.
-     - **Or PDF Download URL**: Direct text input for an external PDF link (e.g., Google Drive / cloud hosted PDF).
-2. **Storefront & Editorial Book Detail View**:
-   - The main storefront 4-column desktop / 2-column mobile grid and layered 6×9 pedestal cards remain **100% identical**.
-   - When a customer opens a book in the **Editorial Detail View**:
-     - If the book offers **Both** formats, a minimalist segmented selector (`PHYSICAL · ₹1,450` | `EBOOK (PDF) · ₹650`) sits directly above the `BUY` and `ADD TO CART` buttons.
-     - If the book is **eBook Only**, the format specification clearly indicates `6 × 9 in Digital PDF Edition` and the purchase button purchases the PDF edition.
-3. **Cart, Checkout & Instant PDF Unlock**:
-   - Cart items display their selected format (`6 × 9 in` vs `eBook · PDF Edition`).
-   - If the customer's checkout consists solely of digital eBook PDFs, the physical street address field becomes optional (`Delivery Address (Optional for Instant eBook PDF)`).
-   - Upon **Order Confirmation**, a primary **DOWNLOAD EBOOK (PDF)** button is unlocked for each purchased eBook right above the **Download Official Receipt** button, triggering an immediate browser `.pdf` download.
+### 2. Mobile Top Header & Horizontal Overflow Lock
+- Reduce mobile header horizontal padding (`px-3.5 sm:px-6 md:px-12`) and utility icon spacing (`gap-1.5 sm:gap-4`) so `LEKHIX`, Search, Theme Toggle, `ADMIN`, and `CART (0)` fit cleanly inside a single 375px row without clipping the right border of `CART (0)`.
+- Apply `overflow-x-hidden w-full max-w-[100vw] overscroll-x-none` on `html`, `body`, and `#root`.
 
-### Visual Identity & Theme
-- Preserves the existing **Cormorant Garamond** + **Plus Jakarta Sans** typography, dual Light (`#FAFAFA`) / Dark (`#0A0A0C`) palette, zero-pill metadata rules, and strict 6×9 cover proportions.
+### 3. Mobile Home Screen — Side-by-Side Hero & Above-the-Fold Grid
+- **Mobile Hero (`< lg`)**:
+  - Uses a 12-column horizontal split right on mobile:
+    - **Left (5 cols)**: Shadowed `6×9` book cover inside a subtle pedestal frame.
+    - **Right (7 cols)**: Format label (`EBOOK PDF` / `6×9 HARDCOVER`), serif title, concise 2-line description, `BUY ₹...` button, and slide counter (`01 — 04 →`).
+  - **Desktop Hero (`lg:`)**: Preserves the existing spacious 12-column Alpine layout.
+- Immediately below the compact mobile Hero, the sticky-feeling category filter pills (`All Products · Books · Stationery`) and the **2-column 6×9 product grid** are visible without scrolling.
 
----
+### 4. Mobile Cart Drawer (`CheckoutModal`) Fix
+- Sanitize persisted `localStorage` cart data on load so any legacy item missing `product` or `product.specs` is safely discarded instead of crashing React.
+- On mobile, style the Cart drawer with a clear top bar, high-contrast item list, and—when `cartCount === 0`—a structured bordered card displaying the LEKHIX mark, *"Your shopping bag is currently empty"*, and a solid **"EXPLORE BOOKS & EBOOKS"** button that returns to the catalog.
 
-## 3. Key Product Decisions & Trade-Offs
-
-- **Decision 1: Format Selector Inside Book Details vs. Separate Storefront Page**
-  - *Chosen Approach*: Keep the storefront navigation tabs (`All Products`, `Books`, `Stationery`, `Bookshelf`) unchanged and place the `Physical` / `eBook (PDF)` format switcher inside the Book Detail View (plus an `eBooks` filter tab inside the Admin Console).
-  - *Why*: Matches your exact preference, keeps the storefront clean, and avoids duplicating the same book twice in the main catalog grid.
-- **Decision 2: Hybrid PDF Storage (Uploaded PDF + External URL + Formatted 6×9 PDF Generator)**
-  - *Chosen Approach*: Support direct `.pdf` file upload (via server/local storage endpoint `/api/upload-pdf` + data URL fallback for small PDFs) and external PDF URLs, plus an automatic 6×9 archival PDF generator when a seeded book is purchased as an eBook.
-  - *Why*: Ensures large uploaded PDFs do not exceed Firestore's 1 MB document limit while guaranteeing every eBook purchase delivers a real, downloadable `.pdf` file immediately after checkout.
+### 5. Per-Book Edition Control (`eBook` Default, `Physical Only`, `Both`)
+- **Admin Console (`CatalogManager`)**:
+  - Clicking **`+ Add Book / Stationery`** defaults `bookFormat` to `'ebook'` (`eBook Only — PDF Download`).
+  - The 3-option selector (`eBook Only (PDF)`, `Physical Only (6×9)`, `Both (Physical + eBook)`) lets the admin configure each book independently.
+- **Catalog Variety & Storefront Behavior**:
+  - Seeded catalog books include distinct examples of **`eBook Only (PDF)`**, **`Physical Only (6×9 Hardcover)`**, and **`Both (Physical + eBook PDF)`**.
+  - On the **Product Grid**, each book card subtly indicates its edition availability (`EBOOK PDF`, `6×9 HARDCOVER`, or `HARDCOVER + PDF`) without adding pill clutter.
+  - On the **Book Detail View**:
+    - If a book is **`eBook Only`**, only the eBook PDF purchase option (`BUY EBOOK (PDF) ₹...`) is shown.
+    - If a book is **`Physical Only`**, only the Physical 6×9 purchase option (`BUY ₹...`) is shown.
+    - If a book is **`Both`**, the customer can toggle between `PHYSICAL (6×9 IN)` and `EBOOK (PDF)`.
 
 ---
 
-## 4. Technical Architecture & Data Strategy *(Technical Reference)*
-
-### Architecture & Component Diagram
+## 3. Technical Architecture & Data Strategy *(Technical Reference)*
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
-│                        CatalogContext & Firestore                          │
-│  CatalogItem { bookFormat: 'physical' | 'ebook' | 'both',                  │
-│                ebookPrice?, ebookPdfUrl?, ebookFileName? }                 │
-│  CartItem    { product, quantity, selectedFormat: 'physical' | 'ebook' }   │
+│                  Viewport & Theme Shell (index.html / CSS)                 │
+│  • viewport-fit=cover + black-translucent iOS PWA status bar               │
+│  • ThemeContext syncs html/body background & meta[name="theme-color"]      │
+│    (#FAFAFA in Light Mode / #0A0A0C in Dark Mode)                          │
+│  • html, body, #root: overflow-x: hidden; max-width: 100vw                 │
 └───────────────┬─────────────────────────────┬──────────────────────────────┘
                 │                             │
                 ▼                             ▼
 ┌───────────────────────────────────┐ ┌──────────────────────────────────────┐
-│      Admin CatalogManager         │ │       EditorialDetailView            │
-│ • Filter: All | Books | eBooks |  │ │ • Format Selector:                   │
-│   Stationery                      │ │   [ PHYSICAL (6×9) ] [ EBOOK (PDF) ] │
-│ • Book Format Radio/Select:       │ │ • Updates active price & passes      │
-│   Physical / eBook (PDF) / Both   │ │   selectedFormat to BUY / Cart       │
-│ • Direct .pdf Upload (/api/pdf)   │ └──────────────────┬───────────────────┘
-│   & External PDF URL input        │                    │
-└───────────────────────────────────┘                    ▼
-                                      ┌──────────────────────────────────────┐
-                                      │           CheckoutModal              │
-                                      │ • Displays format per item           │
-                                      │ • Address optional for eBook-only    │
-                                      │ • Order Success unlocks instant      │
-                                      │   [ DOWNLOAD EBOOK PDF ] button      │
-                                      └──────────────────────────────────────┘
+│      Mobile & Desktop Header      │ │     Compact Mobile Hero + 2x Grid    │
+│ • Safe-area top inset padding     │ │ • Mobile: 5-col 6×9 cover + 7-col    │
+│ • Compact spacing so CART (0)     │ │   title/CTA side-by-side             │
+│   never clips on 375px screens    │ │ • 2-col product grid visible         │
+└───────────────┬───────────────────┘ │   immediately above the fold         │
+                │                     └──────────────────┬───────────────────┘
+                ▼                                        ▼
+┌───────────────────────────────────┐ ┌──────────────────────────────────────┐
+│   Resilient Cart & CheckoutModal  │ │  Per-Book Format (Admin & PDP)       │
+│ • Guards product?.specs?.author   │ │ • Default new book: 'ebook' (PDF)    │
+│ • Structured Empty Bag card with  │ │ • Supports 'ebook' | 'physical' |    │
+│   [ EXPLORE COLLECTION ] button   │ │   'both' per individual book         │
+└───────────────────────────────────┘ └──────────────────────────────────────┘
 ```
-
-### Data Model & State Updates
-- **`CatalogItem` Extension**:
-  - `bookFormat?: 'physical' | 'ebook' | 'both'` (defaults to `'both'` on seeded books so customers can test both Physical and eBook PDF right away, and configurable per book in Admin).
-  - `ebookPrice?: number` (optional digital price when `bookFormat === 'both'`).
-  - `ebookPdfUrl?: string` (uploaded PDF file URL / data URI or external link).
-  - `ebookFileName?: string` (original uploaded `.pdf` filename for clean display in Admin and download).
-- **`CartItem` & Direct Buy Extension**:
-  - Tracks `selectedFormat?: 'physical' | 'ebook'` so adding both or either format of a book calculates the right unit price (`ebookPrice` vs `price`) and records `EBOOK (PDF)` in the Firestore `orders` collection (`itemType`).
-- **Server PDF Upload Endpoint (`/api/upload-pdf`)**:
-  - Express route in `server.ts` that accepts base64/binary PDF uploads from the Admin Console, saves them to `/public/ebooks/<sanitized-name>.pdf`, and returns the permanent `/ebooks/...` path so even multi-megabyte PDFs can be uploaded and downloaded without hitting Firestore's 1 MB document cap.

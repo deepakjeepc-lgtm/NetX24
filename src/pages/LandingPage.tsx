@@ -1,10 +1,16 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, ChevronDown } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronDown } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrors';
-import { CatalogItem, useCatalog } from '../context/CatalogContext';
+import {
+  CatalogItem,
+  getDefaultSelectedFormat,
+  getEffectivePrice,
+  useCatalog,
+} from '../context/CatalogContext';
+import { useTheme } from '../context/ThemeContext';
 import LekhixLogo from '../components/LekhixLogo';
 import ProductImage6x9 from '../components/ProductImage6x9';
 import EditorialDetailView from '../components/EditorialDetailView';
@@ -24,6 +30,7 @@ export default function LandingPage() {
     isCartOpen,
     setIsCartOpen,
   } = useCatalog();
+  const { theme } = useTheme();
   const { showToast } = useToast();
 
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>('All');
@@ -37,12 +44,27 @@ export default function LandingPage() {
   const [inquiryForm, setInquiryForm] = useState({ name: '', phone: '', message: '' });
   const [submittingInquiry, setSubmittingInquiry] = useState(false);
 
+  // Trigger the exact same scroll/composite pass on theme change that opening a product triggers
+  useEffect(() => {
+    const y = window.scrollY;
+    window.scrollTo({ top: y, behavior: 'instant' as ScrollBehavior });
+  }, [theme]);
+
   const featuredItems = useMemo(() => {
     const list = catalog.filter((i) => i.featured);
     return list.length > 0 ? list : catalog.slice(0, 4);
   }, [catalog]);
 
   const currentHero = featuredItems[heroIndex % featuredItems.length] || catalog[0];
+
+  // Auto-advance Hero products every 3 seconds when viewing the Home Screen
+  useEffect(() => {
+    if (selectedProduct || isCartOpen || featuredItems.length <= 1) return;
+    const intervalId = window.setInterval(() => {
+      setHeroIndex((prev) => (prev + 1) % featuredItems.length);
+    }, 3000);
+    return () => window.clearInterval(intervalId);
+  }, [selectedProduct, isCartOpen, featuredItems.length, heroIndex]);
 
   const filteredProducts = useMemo(() => {
     const base =
@@ -70,11 +92,7 @@ export default function LandingPage() {
     format?: 'physical' | 'ebook'
   ) => {
     haptic.medium();
-    const resolvedFormat =
-      format ||
-      (item.category === 'Books' && item.bookFormat === 'ebook'
-        ? 'ebook'
-        : 'physical');
+    const resolvedFormat = format || getDefaultSelectedFormat(item);
     setDirectBuyItem(item);
     setDirectBuyFormat(resolvedFormat);
     setIsCartOpen(true);
@@ -119,12 +137,30 @@ export default function LandingPage() {
 
   const formattedSlideIndex = (n: number) => String(n).padStart(2, '0');
 
+  const getHeroEditionTag = (item: CatalogItem) => {
+    if (item.category !== 'Books') return 'STATIONERY · 6 × 9 IN';
+    const fmt = item.bookFormat || 'ebook';
+    if (fmt === 'ebook') return 'EBOOK EDITION · PDF';
+    if (fmt === 'physical') return 'HARDCOVER · 6 × 9 IN';
+    return 'HARDCOVER + EBOOK PDF';
+  };
+
+  const heroDefaultFormat = currentHero
+    ? getDefaultSelectedFormat(currentHero)
+    : 'physical';
+  const heroDisplayPrice = currentHero
+    ? getEffectivePrice(currentHero, heroDefaultFormat)
+    : 0;
+
   return (
-    <div className="min-h-screen bg-[#FAFAFA] dark:bg-[#0A0A0C] text-[#111111] dark:text-[#F5F5F7] flex flex-col justify-between">
-      {/* Top Bar — Strict 3-Zone Contract with Original Framed LEKHIX Logo */}
-      <header className="sticky top-0 z-[100] bg-[#FAFAFA]/95 dark:bg-[#0A0A0C]/95 backdrop-blur-sm border-b border-[#ECECE7] dark:border-[#1E1E24]">
-        <div className="max-w-[1440px] mx-auto px-6 md:px-12 h-20 flex items-center justify-between gap-8">
-          {/* Zone 1: Framed LEKHIX Brand Mark (Single Element, No Subtitle) */}
+    <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-[#FAFAFA] dark:bg-[#0A0A0C] text-[#111111] dark:text-[#F5F5F7] flex flex-col justify-between">
+      {/* Top Bar — Pure Tailwind classes (no inline style conflict) matching EditorialDetailView */}
+      <header
+        key={`header-${theme}`}
+        className="sticky top-0 z-[100] pt-[env(safe-area-inset-top)] bg-[#FAFAFA] dark:bg-[#0A0A0C] border-b border-[#ECECE7] dark:border-[#1E1E24]"
+      >
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-12 h-15 sm:h-20 flex items-center justify-between gap-3 sm:gap-6 md:gap-8">
+          {/* Zone 1: Framed LEKHIX Brand Mark */}
           <button
             type="button"
             onClick={() => {
@@ -139,12 +175,12 @@ export default function LandingPage() {
             <LekhixLogo size="sm" />
           </button>
 
-          {/* Zone 2: Clean Single-Line Navigation Links */}
+          {/* Zone 2: Clean Single-Line Navigation Links (Desktop) */}
           <nav className="hidden md:flex items-center gap-8 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
             <button
               type="button"
               onClick={() => handleCategoryNav('All')}
-              className={`py-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`py-1 cursor-pointer whitespace-nowrap shrink-0 ${
                 activeCategory === 'All' && !selectedProduct
                   ? 'text-[#111111] dark:text-white underline underline-offset-8 decoration-1'
                   : 'hover:text-[#111111] dark:hover:text-white'
@@ -155,7 +191,7 @@ export default function LandingPage() {
             <button
               type="button"
               onClick={() => handleCategoryNav('Books')}
-              className={`py-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`py-1 cursor-pointer whitespace-nowrap shrink-0 ${
                 activeCategory === 'Books' && !selectedProduct
                   ? 'text-[#111111] dark:text-white underline underline-offset-8 decoration-1'
                   : 'hover:text-[#111111] dark:hover:text-white'
@@ -166,7 +202,7 @@ export default function LandingPage() {
             <button
               type="button"
               onClick={() => handleCategoryNav('Stationery')}
-              className={`py-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`py-1 cursor-pointer whitespace-nowrap shrink-0 ${
                 activeCategory === 'Stationery' && !selectedProduct
                   ? 'text-[#111111] dark:text-white underline underline-offset-8 decoration-1'
                   : 'hover:text-[#111111] dark:hover:text-white'
@@ -179,7 +215,7 @@ export default function LandingPage() {
               onClick={() => {
                 if (currentHero) handleOpenProduct(currentHero);
               }}
-              className={`py-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`py-1 cursor-pointer whitespace-nowrap shrink-0 ${
                 selectedProduct
                   ? 'text-[#111111] dark:text-white underline underline-offset-8 decoration-1'
                   : 'hover:text-[#111111] dark:hover:text-white'
@@ -189,13 +225,13 @@ export default function LandingPage() {
             </button>
           </nav>
 
-          {/* Zone 3: Primary Action & Utility Controls */}
-          <div className="flex items-center gap-4 shrink-0">
+          {/* Zone 3: Primary Action & Utility Controls (Admin hidden on mobile; stays in footer) */}
+          <div className="flex items-center gap-2 sm:gap-3.5 shrink-0">
             <GlobalSearch onSelectProduct={handleOpenProduct} />
             <ThemeToggle />
             <Link
               to="/admin"
-              className="text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400 hover:text-[#111111] dark:hover:text-white transition-colors whitespace-nowrap shrink-0"
+              className="hidden md:inline-block px-2 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400 hover:text-[#111111] dark:hover:text-white whitespace-nowrap shrink-0"
             >
               Admin
             </Link>
@@ -206,7 +242,7 @@ export default function LandingPage() {
                 setDirectBuyItem(null);
                 setIsCartOpen(true);
               }}
-              className="px-4 py-2 border border-[#111111]/20 dark:border-white/25 text-xs font-bold uppercase tracking-[0.16em] text-[#111111] dark:text-[#F5F5F7] hover:bg-[#111111] hover:text-white dark:hover:bg-white dark:hover:text-[#111111] transition-colors cursor-pointer whitespace-nowrap shrink-0 tabular-nums"
+              className="px-3.5 py-1.5 sm:px-4 sm:py-2 border border-[#111111]/30 dark:border-white/30 text-[11px] sm:text-xs font-bold uppercase tracking-[0.14em] sm:tracking-[0.16em] text-[#111111] dark:text-[#F5F5F7] hover:bg-[#111111] hover:text-white dark:hover:bg-white dark:hover:text-[#111111] cursor-pointer whitespace-nowrap shrink-0 tabular-nums"
             >
               Cart ({cartCount})
             </button>
@@ -214,9 +250,8 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1">
-        {/* Conditional Gestalten Editorial Detail View when a Book/Stationery item is selected */}
+      {/* Main Content Area — Keyed by theme so toggling Dark/Light on Home Screen triggers the exact same fresh section mount as opening a product */}
+      <main key={`main-${theme}`} className="flex-1 w-full">
         {selectedProduct ? (
           <EditorialDetailView
             item={selectedProduct}
@@ -225,79 +260,101 @@ export default function LandingPage() {
             onBuyNow={handleDirectBuy}
           />
         ) : (
-          /* Alpine-Inspired Featured Editorial Hero Showcase */
+          /* Editorial Hero Showcase — Uses the EXACT same top <section> surface and top sub-navigation bar structure as EditorialDetailView so iOS/Android Status Bar switches seamlessly */
           currentHero && (
-            <section className="w-full bg-[#F3F3F0] dark:bg-[#111115] border-b border-[#E5E5E0] dark:border-[#1E1E24]">
-              <div className="max-w-[1440px] mx-auto px-6 md:px-16 py-12 md:py-20">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
-                  {/* Left Editorial Column (Alpine Reference) */}
-                  <div className="lg:col-span-5 space-y-6">
+            <section className="w-full bg-[#FFFFFF] dark:bg-[#0E0E11] border-b border-[#E5E5E0] dark:border-[#222227]">
+              {/* Top Sub-Bar matching EditorialDetailView's h-13 bar so WebKit's top-of-page color sampler always hits 100% solid background across the full width */}
+              <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-16 h-12 sm:h-13 flex items-center justify-between border-b border-[#ECECE7] dark:border-[#222227] text-xs">
+                <button
+                  type="button"
+                  onClick={() => handleOpenProduct(currentHero)}
+                  className="inline-flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.16em] text-[#111111] dark:text-[#F5F5F7] hover:opacity-70 cursor-pointer whitespace-nowrap"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  <span>Product details</span>
+                </button>
+
+                <div className="flex items-center gap-2.5 sm:gap-3.5 text-[10px] sm:text-[11px] font-bold tabular-nums text-[#111111] dark:text-[#F5F5F7]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      haptic.light();
+                      setHeroIndex(
+                        (prev) =>
+                          (prev - 1 + featuredItems.length) % featuredItems.length
+                      );
+                    }}
+                    className="p-1 text-zinc-500 hover:text-[#111111] dark:hover:text-white cursor-pointer"
+                    aria-label="Previous featured edition"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <span>{formattedSlideIndex((heroIndex % featuredItems.length) + 1)}</span>
+                  <span className="w-6 sm:w-10 h-[1px] bg-[#111111]/30 dark:bg-white/30" />
+                  <span className="text-zinc-400">
+                    {formattedSlideIndex(featuredItems.length)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      haptic.light();
+                      setHeroIndex((prev) => (prev + 1) % featuredItems.length);
+                    }}
+                    className="p-1 text-[#111111] dark:text-white hover:translate-x-0.5 transition-transform cursor-pointer"
+                    aria-label="Next featured edition"
+                  >
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Hero Main Split Content */}
+              <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-16 py-6 sm:py-10 md:py-16">
+                <div className="grid grid-cols-12 gap-4 sm:gap-8 lg:gap-12 items-center">
+                  {/* Cover Pedestal Column: Left on Mobile (5 cols), Right on Desktop (6 cols) */}
+                  <div className="col-span-5 sm:col-span-4 lg:col-span-6 lg:order-2 flex justify-center lg:justify-end">
+                    <div
+                      onClick={() => handleOpenProduct(currentHero)}
+                      className="w-full max-w-[138px] sm:max-w-[196px] md:max-w-[244px] lg:max-w-[284px] bg-[#F2F2EE] dark:bg-[#141417] p-3 sm:p-5 lg:p-6 cursor-pointer group"
+                    >
+                      <div className="w-full aspect-[2/3] shadow-[0_16px_32px_-10px_rgba(0,0,0,0.3)] dark:shadow-[0_16px_32px_-10px_rgba(0,0,0,0.85)] transition-transform duration-150 group-hover:-translate-y-0.5 overflow-hidden">
+                        <ProductImage6x9
+                          src={currentHero.image}
+                          title={currentHero.title}
+                          author={currentHero.specs?.author}
+                          category={currentHero.category}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Editorial Typography & Purchase Column: Right on Mobile (7 cols), Left on Desktop (6 cols) — Clean without Author Name */}
+                  <div className="col-span-7 sm:col-span-8 lg:col-span-6 lg:order-1 flex flex-col justify-center min-w-0">
+                    <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400 truncate mb-2 sm:mb-3">
+                      {getHeroEditionTag(currentHero)}
+                    </p>
+
                     <h1
-                      className="font-editorial text-3xl sm:text-4xl md:text-5xl font-semibold text-[#111111] dark:text-[#F5F5F7] leading-[1.1] tracking-tight"
+                      onClick={() => handleOpenProduct(currentHero)}
+                      className="font-editorial text-[22px] sm:text-3xl md:text-5xl font-semibold text-[#111111] dark:text-[#F5F5F7] leading-[1.12] tracking-tight cursor-pointer line-clamp-2 lg:line-clamp-none"
                       style={{ textWrap: 'balance' }}
                     >
-                      / {currentHero.title}
+                      {currentHero.title}
                     </h1>
 
-                    <p className="text-xs sm:text-sm leading-[1.8] text-zinc-600 dark:text-zinc-400 max-w-md line-clamp-4">
+                    <p className="hidden sm:block mt-4 text-xs md:text-sm leading-[1.75] text-zinc-600 dark:text-zinc-400 max-w-md line-clamp-3">
                       {currentHero.description}
                     </p>
 
-                    <div className="pt-2">
+                    <div className="mt-4 sm:mt-6 flex items-center gap-3">
                       <button
                         type="button"
                         onClick={() => handleDirectBuy(currentHero)}
-                        className="px-8 py-3.5 border border-[#1E3A5F] dark:border-white text-[11px] font-bold tracking-[0.2em] uppercase text-[#111111] dark:text-white hover:bg-[#111111] hover:text-white dark:hover:bg-white dark:hover:text-[#111111] transition-colors cursor-pointer tabular-nums whitespace-nowrap"
+                        className="px-4.5 py-2.5 sm:px-7 sm:py-3.5 bg-[#111111] dark:bg-white text-white dark:text-[#111111] text-[10px] sm:text-[11px] font-bold tracking-[0.18em] uppercase hover:opacity-85 cursor-pointer tabular-nums whitespace-nowrap"
                       >
-                        BUY ₹{currentHero.price.toLocaleString('en-IN')}
+                        BUY · ₹{heroDisplayPrice.toLocaleString('en-IN')}
                       </button>
                     </div>
-                  </div>
-
-                  {/* Right 6x9 Inch Studio Preview Column */}
-                  <div className="lg:col-span-7 flex justify-center lg:justify-end">
-                    <div
-                      onClick={() => handleOpenProduct(currentHero)}
-                      className="w-56 sm:w-64 md:w-72 aspect-[2/3] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.28)] dark:shadow-[0_30px_60px_-15px_rgba(0,0,0,0.8)] cursor-pointer transition-transform duration-150 hover:-translate-y-1"
-                    >
-                      <ProductImage6x9
-                        src={currentHero.image}
-                        title={currentHero.title}
-                        author={currentHero.specs.author}
-                        category={currentHero.category}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Hero Bottom Controls: "∨ Product details" left & "01 —— 04 ->" right */}
-                <div className="mt-12 pt-6 flex items-center justify-between text-xs">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenProduct(currentHero)}
-                    className="inline-flex items-center gap-2 text-[11px] font-bold tracking-[0.14em] text-[#111111] dark:text-zinc-200 hover:opacity-65 transition-opacity cursor-pointer"
-                  >
-                    <ChevronDown className="w-3.5 h-3.5" />
-                    <span>Product details</span>
-                  </button>
-
-                  <div className="flex items-center gap-4 text-[11px] font-bold tabular-nums text-[#111111] dark:text-zinc-200">
-                    <span>{formattedSlideIndex((heroIndex % featuredItems.length) + 1)}</span>
-                    <span className="w-12 h-[1px] bg-[#111111]/30 dark:bg-white/30" />
-                    <span className="text-zinc-400">
-                      {formattedSlideIndex(featuredItems.length)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        haptic.light();
-                        setHeroIndex((prev) => (prev + 1) % featuredItems.length);
-                      }}
-                      className="p-1 text-[#1E3A5F] dark:text-white hover:translate-x-0.5 transition-transform cursor-pointer"
-                      aria-label="Next featured edition"
-                    >
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
                   </div>
                 </div>
               </div>
@@ -305,14 +362,14 @@ export default function LandingPage() {
           )
         )}
 
-        {/* Storefront Category Filter Bar & 3-Column 6x9 Product Grid (Hikone + Alpine Reference) */}
+        {/* Storefront Category Filter Bar & 4-Column Desktop / 2-Column Mobile 6x9 Product Grid */}
         <section
           id="collection-grid"
-          className="max-w-[1440px] mx-auto px-6 md:px-16 py-14 md:py-20"
+          className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-16 py-7 sm:py-14 md:py-20"
         >
           {/* Filter & Sorting Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-10">
-            <div className="flex items-center gap-7 text-xs font-semibold tracking-[0.14em] uppercase">
+          <div className="flex flex-row items-center justify-between gap-2 pb-6 sm:pb-10">
+            <div className="flex items-center gap-3.5 sm:gap-7 text-[11px] sm:text-xs font-semibold tracking-[0.1em] sm:tracking-[0.14em] uppercase">
               {(['All', 'Books', 'Stationery'] as const).map((cat) => {
                 const active = activeCategory === cat;
                 return (
@@ -323,24 +380,31 @@ export default function LandingPage() {
                       haptic.selection();
                       setActiveCategory(cat);
                     }}
-                    className={`transition-colors cursor-pointer whitespace-nowrap ${
+                    className={`py-1 cursor-pointer whitespace-nowrap shrink-0 ${
                       active
-                        ? 'text-[#111111] dark:text-white font-bold'
+                        ? 'text-[#111111] dark:text-white font-bold underline underline-offset-8 decoration-1'
                         : 'text-zinc-400 hover:text-[#111111] dark:hover:text-zinc-200'
                     }`}
                   >
-                    {cat === 'All' ? 'All Products' : cat}
+                    {cat === 'All' ? (
+                      <>
+                        <span className="sm:hidden">All</span>
+                        <span className="hidden sm:inline">All Products</span>
+                      </>
+                    ) : (
+                      cat
+                    )}
                   </button>
                 );
               })}
             </div>
 
-            <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="flex items-center shrink-0">
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as SortOption)}
                 aria-label="Sort products"
-                className="bg-transparent text-xs font-medium text-zinc-600 dark:text-zinc-300 border-none outline-none cursor-pointer pr-2"
+                className="bg-transparent text-[11px] sm:text-xs font-medium text-zinc-600 dark:text-zinc-300 border-none outline-none cursor-pointer pr-1"
               >
                 <option value="default" className="bg-white dark:bg-[#141418]">
                   Default sorting
@@ -356,68 +420,70 @@ export default function LandingPage() {
           </div>
 
           {/* 4-Column Desktop / 2-Column Mobile Product Grid — Shadowed 6x9 Box on Pedestal Card */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 sm:gap-x-7 gap-y-8 sm:gap-y-12">
-            {filteredProducts.map((item) => (
-              <article
-                key={item.id}
-                onClick={() => handleOpenProduct(item)}
-                className="group cursor-pointer flex flex-col"
-              >
-                {/* Pedestal Card with Uniform Padding & Exact 6x9 Shadowed Box (No bottom strip) */}
-                <div className="w-full bg-[#F2F2EE] dark:bg-[#141417] p-4 sm:p-6 md:p-7 flex items-center justify-center transition-colors duration-150 group-hover:bg-[#EAEAE4] dark:group-hover:bg-[#19191E]">
-                  <div className="w-full aspect-[2/3] shadow-[0_16px_32px_-8px_rgba(0,0,0,0.28)] dark:shadow-[0_16px_32px_-8px_rgba(0,0,0,0.75)] transition-transform duration-150 group-hover:-translate-y-1 overflow-hidden">
-                    <ProductImage6x9
-                      src={item.image}
-                      title={item.title}
-                      author={item.specs.author}
-                      category={item.category}
-                    />
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3.5 sm:gap-x-7 gap-y-7 sm:gap-y-12">
+            {filteredProducts.map((item) => {
+              const displayFormat = getDefaultSelectedFormat(item);
+              const displayPrice = getEffectivePrice(item, displayFormat);
+              return (
+                <article
+                  key={item.id}
+                  onClick={() => handleOpenProduct(item)}
+                  className="group cursor-pointer flex flex-col min-w-0"
+                >
+                  {/* Pedestal Card with Uniform Padding & Exact 6x9 Shadowed Box */}
+                  <div className="w-full bg-[#F2F2EE] dark:bg-[#141417] p-3.5 sm:p-6 md:p-7 flex items-center justify-center group-hover:bg-[#EAEAE4] dark:group-hover:bg-[#19191E]">
+                    <div className="w-full aspect-[2/3] shadow-[0_14px_28px_-8px_rgba(0,0,0,0.28)] dark:shadow-[0_14px_28px_-8px_rgba(0,0,0,0.75)] transition-transform duration-150 group-hover:-translate-y-1 overflow-hidden">
+                      <ProductImage6x9
+                        src={item.image}
+                        title={item.title}
+                        author={item.specs?.author}
+                        category={item.category}
+                      />
+                    </div>
                   </div>
-                </div>
 
-                {/* Subtitle-Free Metadata Row: Only Title and Price */}
-                <div className="pt-3.5 flex items-baseline justify-between gap-3">
-                  <h2 className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.06em] text-[#111111] dark:text-[#F5F5F7] truncate">
-                    {item.title}
-                  </h2>
+                  {/* Metadata Row: Title and Price */}
+                  <div className="pt-3 flex items-baseline justify-between gap-2 min-w-0">
+                    <h2 className="text-[11px] sm:text-xs font-bold uppercase tracking-[0.05em] text-[#111111] dark:text-[#F5F5F7] truncate">
+                      {item.title}
+                    </h2>
 
-                  <div className="flex items-baseline gap-2 shrink-0 tabular-nums text-[11px] sm:text-xs">
-                    {item.originalPrice && item.originalPrice > item.price && (
-                      <span className="text-zinc-400 line-through hidden sm:inline">
-                        ₹{item.originalPrice.toLocaleString('en-IN')}
+                    <div className="flex items-baseline gap-1.5 shrink-0 tabular-nums text-[11px] sm:text-xs">
+                      {item.originalPrice && item.originalPrice > displayPrice && (
+                        <span className="text-zinc-400 line-through hidden sm:inline">
+                          ₹{item.originalPrice.toLocaleString('en-IN')}
+                        </span>
+                      )}
+                      <span className="font-bold text-[#111111] dark:text-[#F5F5F7] underline underline-offset-4 decoration-zinc-400/60">
+                        ₹{displayPrice.toLocaleString('en-IN')}
                       </span>
-                    )}
-                    <span className="font-bold text-[#111111] dark:text-[#F5F5F7] underline underline-offset-4 decoration-zinc-400/60">
-                      ₹{item.price.toLocaleString('en-IN')}
-                    </span>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         </section>
       </main>
 
       {/* Hikone-Inspired Minimalist Footer — Zero Hardcoded External Links */}
       <footer className="border-t border-[#E5E5E0] dark:border-[#1E1E24] bg-[#F6F6F3] dark:bg-[#0D0D10]">
-        <div className="max-w-[1440px] mx-auto px-6 md:px-16 py-16 md:py-24">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
-            {/* Left Statement */}
-            <div className="lg:col-span-5 space-y-6">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-16 py-12 sm:py-16 md:py-24">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-start">
+            <div className="lg:col-span-5 space-y-5">
               <h2 className="text-2xl sm:text-3xl font-bold uppercase tracking-tight text-[#111111] dark:text-white leading-tight">
                 DON&apos;T BE SHY,
                 <br />
                 JUST SAY HI!
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-sm">
-                Inquire about collector 6×9 hardcover editions, institutional book orders, or bespoke stationery sets.
+                Inquire about collector 6×9 hardcover editions, instant PDF eBooks, or bespoke stationery sets.
               </p>
-              <div className="pt-2">
+              <div className="pt-1">
                 <LekhixLogo size="sm" />
               </div>
             </div>
 
-            {/* Right Direct Inquiry Form (No hardcoded external links or social placeholders) */}
             <form
               onSubmit={handleInquirySubmit}
               className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4"
@@ -468,7 +534,7 @@ export default function LandingPage() {
                   onChange={(e) =>
                     setInquiryForm({ ...inquiryForm, message: e.target.value })
                   }
-                  placeholder="Tell us which book or stationery edition you are looking for..."
+                  placeholder="Tell us which book, eBook PDF, or stationery edition you are looking for..."
                   className="w-full px-3.5 py-2.5 text-xs bg-[#FFFFFF] dark:bg-[#141418] border border-[#D4D4D0] dark:border-[#282830] focus:border-[#111111] dark:focus:border-white outline-none resize-none"
                 />
               </div>
@@ -477,7 +543,7 @@ export default function LandingPage() {
                 <button
                   type="submit"
                   disabled={submittingInquiry}
-                  className="px-7 py-3 bg-[#111111] dark:bg-white text-white dark:text-[#111111] text-[11px] font-bold uppercase tracking-[0.2em] hover:opacity-85 transition-opacity cursor-pointer"
+                  className="px-7 py-3 bg-[#111111] dark:bg-white text-white dark:text-[#111111] text-[11px] font-bold uppercase tracking-[0.2em] hover:opacity-85 cursor-pointer"
                 >
                   {submittingInquiry ? 'SENDING...' : 'SEND MESSAGE'}
                 </button>
@@ -485,13 +551,13 @@ export default function LandingPage() {
             </form>
           </div>
 
-          <div className="mt-16 pt-8 border-t border-[#E5E5E0] dark:border-[#1E1E24] flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-zinc-400">
-            <span>LEKHIX — BOOKS &amp; ARCHITECTURAL STATIONERY</span>
+          <div className="mt-12 sm:mt-16 pt-8 border-t border-[#E5E5E0] dark:border-[#1E1E24] flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-zinc-400">
+            <span>LEKHIX — BOOKS, EBOOKS &amp; ARCHITECTURAL STATIONERY</span>
             <div className="flex items-center gap-6">
               <span>ALL EDITIONS FORMATTED TO 6 × 9 IN</span>
               <Link
                 to="/admin"
-                className="font-bold uppercase tracking-[0.16em] text-[#111111] dark:text-zinc-200 hover:opacity-70 transition-opacity"
+                className="font-bold uppercase tracking-[0.16em] text-[#111111] dark:text-zinc-200 hover:opacity-70"
               >
                 Admin Console
               </Link>
@@ -500,7 +566,7 @@ export default function LandingPage() {
         </div>
       </footer>
 
-      {/* Shopping Bag & Checkout Drawer */}
+      {/* Full-Screen Shopping Bag & Checkout Page */}
       <CheckoutModal
         isOpen={isCartOpen}
         onClose={() => {
