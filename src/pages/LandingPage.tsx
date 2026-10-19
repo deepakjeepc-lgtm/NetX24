@@ -31,6 +31,7 @@ export default function LandingPage() {
   const [heroIndex, setHeroIndex] = useState(0);
   const [selectedProduct, setSelectedProduct] = useState<CatalogItem | null>(null);
   const [directBuyItem, setDirectBuyItem] = useState<CatalogItem | null>(null);
+  const [directBuyFormat, setDirectBuyFormat] = useState<'physical' | 'ebook'>('physical');
 
   // Minimal footer inquiry state (saves to Firestore contactSubmissions; zero hardcoded links)
   const [inquiryForm, setInquiryForm] = useState({ name: '', phone: '', message: '' });
@@ -64,9 +65,18 @@ export default function LandingPage() {
     window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
   };
 
-  const handleDirectBuy = (item: CatalogItem) => {
+  const handleDirectBuy = (
+    item: CatalogItem,
+    format?: 'physical' | 'ebook'
+  ) => {
     haptic.medium();
+    const resolvedFormat =
+      format ||
+      (item.category === 'Books' && item.bookFormat === 'ebook'
+        ? 'ebook'
+        : 'physical');
     setDirectBuyItem(item);
+    setDirectBuyFormat(resolvedFormat);
     setIsCartOpen(true);
   };
 
@@ -498,6 +508,7 @@ export default function LandingPage() {
           setDirectBuyItem(null);
         }}
         directItem={directBuyItem}
+        directFormat={directBuyFormat}
       />
     </div>
   );

@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { CatalogItem, useCatalog } from '../context/CatalogContext';
+import {
+  CatalogItem,
+  getEffectivePrice,
+  useCatalog,
+} from '../context/CatalogContext';
 import ProductImage6x9 from './ProductImage6x9';
 import BookPreviewModal from './BookPreviewModal';
 import { haptic } from '../utils/haptics';
@@ -9,15 +13,16 @@ interface EditorialDetailViewProps {
   item: CatalogItem;
   onSelectItem: (item: CatalogItem) => void;
   onBack: () => void;
-  onBuyNow: (item: CatalogItem) => void;
+  onBuyNow: (item: CatalogItem, format?: 'physical' | 'ebook') => void;
 }
 
 /**
  * Editorial Book & Stationery Detail View modeled directly on the uploaded Gestalten reference image:
  * - Top sub-bar: Back to Collection | Book Listing | VIEW CART
- * - Left column: Strict 6×9 cover preview on soft circular aura + "CLICK FOR PREVIEW"
+ * - Left column: Strict 6×9 cover preview + "CLICK FOR PREVIEW"
  * - Center column: Editorial Serif Title, "by AUTHOR", lead italic intro + body prose,
- *   structured 2-column × 3-row specification table, reviewer quote, and BUY / ADD TO CART actions
+ *   Physical vs eBook (PDF) format selector for Books, BUY / ADD TO CART actions,
+ *   structured 2-column × 3-row specification table, and reviewer quote
  * - Right column: Vertical Bookshelf sidebar ("EXPAND BOOKSHELF") with 6×9 thumbnails
  */
 export default function EditorialDetailView({
@@ -29,6 +34,20 @@ export default function EditorialDetailView({
   const { catalog, addToCart, cartCount, setIsCartOpen } = useCatalog();
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isShelfExpanded, setIsShelfExpanded] = useState(false);
+
+  const bookFormatMode =
+    item.category === 'Books' ? item.bookFormat || 'both' : 'physical';
+
+  const [selectedFormat, setSelectedFormat] = useState<'physical' | 'ebook'>(
+    bookFormatMode === 'ebook' ? 'ebook' : 'physical'
+  );
+
+  useEffect(() => {
+    const mode = item.category === 'Books' ? item.bookFormat || 'both' : 'physical';
+    setSelectedFormat(mode === 'ebook' ? 'ebook' : 'physical');
+  }, [item]);
+
+  const activePrice = getEffectivePrice(item, selectedFormat);
 
   // Split description into an italic editorial lead and main body paragraph
   const sentences = item.description.split(/(?<=\.)\s+/);
@@ -69,7 +88,7 @@ export default function EditorialDetailView({
 
       {/* Main 3-Column Gestalten Layout */}
       <div className="max-w-[1440px] mx-auto grid grid-cols-1 lg:grid-cols-12 min-h-[760px]">
-        {/* Left Column (Cols 1-5): 6x9 Book Cover on Circular Studio Pedestal + CLICK FOR PREVIEW */}
+        {/* Left Column (Cols 1-5): 6x9 Book Cover + CLICK FOR PREVIEW */}
         <div className="lg:col-span-5 p-8 md:p-14 lg:p-16 flex flex-col items-center justify-center relative">
           <div
             onClick={() => {
@@ -102,7 +121,7 @@ export default function EditorialDetailView({
           </div>
         </div>
 
-        {/* Center Column (Cols 6-10): Editorial Typography, Specs Table, Purchase Module & Review */}
+        {/* Center Column (Cols 6-10): Editorial Typography, Format Selector, Specs Table & Purchase Module */}
         <div className="lg:col-span-5 p-8 md:p-14 lg:py-16 lg:px-10 flex flex-col justify-center border-t lg:border-t-0 border-[#ECECE7] dark:border-[#222227]">
           <div className="max-w-xl">
             {/* Editorial Serif Title */}
@@ -127,26 +146,77 @@ export default function EditorialDetailView({
             </p>
 
             {/* Secondary Body Prose */}
-            <p className="text-xs sm:text-[13px] leading-[1.8] text-zinc-600 dark:text-zinc-400 mb-8">
+            <p className="text-xs sm:text-[13px] leading-[1.8] text-zinc-600 dark:text-zinc-400 mb-7">
               {bodyParagraph}
             </p>
+
+            {/* Book Format Selector (Physical 6x9 vs eBook PDF) */}
+            {item.category === 'Books' && (
+              <div className="mb-6">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400 mb-2.5">
+                  SELECT EDITION FORMAT
+                </p>
+                {bookFormatMode === 'both' ? (
+                  <div className="inline-flex flex-wrap items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        haptic.selection();
+                        setSelectedFormat('physical');
+                      }}
+                      className={`px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] border transition-colors cursor-pointer whitespace-nowrap tabular-nums ${
+                        selectedFormat === 'physical'
+                          ? 'bg-[#111111] text-white border-[#111111] dark:bg-white dark:text-[#111111] dark:border-white'
+                          : 'bg-transparent text-zinc-600 dark:text-zinc-300 border-[#D4D4D0] dark:border-[#2E2E36] hover:border-[#111111] dark:hover:border-white'
+                      }`}
+                    >
+                      PHYSICAL (6×9 IN) · ₹{item.price.toLocaleString('en-IN')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        haptic.selection();
+                        setSelectedFormat('ebook');
+                      }}
+                      className={`px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] border transition-colors cursor-pointer whitespace-nowrap tabular-nums ${
+                        selectedFormat === 'ebook'
+                          ? 'bg-[#111111] text-white border-[#111111] dark:bg-white dark:text-[#111111] dark:border-white'
+                          : 'bg-transparent text-zinc-600 dark:text-zinc-300 border-[#D4D4D0] dark:border-[#2E2E36] hover:border-[#111111] dark:hover:border-white'
+                      }`}
+                    >
+                      EBOOK (PDF) · ₹
+                      {(item.ebookPrice || item.price).toLocaleString('en-IN')}
+                    </button>
+                  </div>
+                ) : bookFormatMode === 'ebook' ? (
+                  <div className="text-xs font-bold uppercase tracking-[0.14em] text-[#111111] dark:text-white">
+                    EBOOK EDITION · INSTANT PDF DOWNLOAD
+                  </div>
+                ) : (
+                  <div className="text-xs font-bold uppercase tracking-[0.14em] text-[#111111] dark:text-white">
+                    PHYSICAL HARDCOVER · 6 × 9 IN
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Purchase Module (Alpine + Gestalten hybrid) */}
             <div className="flex flex-wrap items-center gap-4 pb-8 mb-8 border-b border-[#ECECE7] dark:border-[#222227]">
               <button
                 onClick={() => {
                   haptic.medium();
-                  onBuyNow(item);
+                  onBuyNow(item, selectedFormat);
                 }}
                 className="px-7 py-3 border border-[#1E3A5F] dark:border-white text-xs font-bold tracking-[0.18em] uppercase text-[#111111] dark:text-white hover:bg-[#111111] hover:text-white dark:hover:bg-white dark:hover:text-[#111111] transition-colors cursor-pointer tabular-nums whitespace-nowrap"
               >
-                BUY ₹{item.price.toLocaleString('en-IN')}
+                {selectedFormat === 'ebook' ? 'BUY EBOOK (PDF)' : 'BUY'} ₹
+                {activePrice.toLocaleString('en-IN')}
               </button>
 
               <button
                 onClick={() => {
                   haptic.light();
-                  addToCart(item, 1);
+                  addToCart(item, 1, selectedFormat);
                   setIsCartOpen(true);
                 }}
                 className="px-6 py-3 bg-[#111111] dark:bg-white text-white dark:text-[#111111] text-xs font-bold tracking-[0.18em] uppercase hover:opacity-85 transition-opacity cursor-pointer whitespace-nowrap"
@@ -154,11 +224,13 @@ export default function EditorialDetailView({
                 ADD TO CART
               </button>
 
-              {item.originalPrice && item.originalPrice > item.price && (
-                <span className="text-xs text-zinc-400 line-through tabular-nums ml-1">
-                  ₹{item.originalPrice.toLocaleString('en-IN')}
-                </span>
-              )}
+              {selectedFormat === 'physical' &&
+                item.originalPrice &&
+                item.originalPrice > item.price && (
+                  <span className="text-xs text-zinc-400 line-through tabular-nums ml-1">
+                    ₹{item.originalPrice.toLocaleString('en-IN')}
+                  </span>
+                )}
             </div>
 
             {/* Structured 2-Column × 3-Row Specifications Grid (Gestalten Reference) */}
@@ -177,7 +249,9 @@ export default function EditorialDetailView({
                   Features
                 </span>
                 <span className="text-zinc-500 dark:text-zinc-400 truncate">
-                  {item.specs.features}
+                  {selectedFormat === 'ebook'
+                    ? 'Instant PDF Download · High-Res'
+                    : item.specs.features}
                 </span>
               </div>
 
@@ -204,7 +278,9 @@ export default function EditorialDetailView({
                   Format
                 </span>
                 <span className="text-zinc-500 dark:text-zinc-400 tabular-nums truncate">
-                  {item.specs.format}
+                  {selectedFormat === 'ebook'
+                    ? '6 × 9 in · Digital PDF'
+                    : item.specs.format}
                 </span>
               </div>
 

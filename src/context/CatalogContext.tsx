@@ -3,6 +3,8 @@ import { db } from '../lib/firebase';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrors';
 
+export type BookFormat = 'physical' | 'ebook' | 'both';
+
 export interface ProductSpecs {
   author: string;
   publisher: string;
@@ -32,11 +34,35 @@ export interface CatalogItem {
   description: string;
   specs: ProductSpecs;
   previewPages?: PreviewPage[];
+  /** For Books: whether sold as Physical hardcover, Digital eBook (PDF), or Both */
+  bookFormat?: BookFormat;
+  /** Price in INR for the eBook (PDF) edition when bookFormat is 'ebook' or 'both' */
+  ebookPrice?: number;
+  /** Uploaded PDF file path/data URL or external PDF download link */
+  ebookPdfUrl?: string;
+  /** Original PDF filename for display and download */
+  ebookFileName?: string;
 }
 
 export interface CartItem {
   product: CatalogItem;
   quantity: number;
+  selectedFormat: 'physical' | 'ebook';
+}
+
+export function getEffectivePrice(
+  product: CatalogItem,
+  selectedFormat: 'physical' | 'ebook' = 'physical'
+): number {
+  if (
+    product.category === 'Books' &&
+    selectedFormat === 'ebook' &&
+    typeof product.ebookPrice === 'number' &&
+    product.ebookPrice > 0
+  ) {
+    return product.ebookPrice;
+  }
+  return Number(product.price);
 }
 
 export const INITIAL_CATALOG: CatalogItem[] = [
@@ -46,7 +72,10 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     category: 'Books',
     price: 1450,
     originalPrice: 1800,
-    image: '/catalog/book-debt.png?v=3',
+    bookFormat: 'both',
+    ebookPrice: 650,
+    ebookFileName: 'Debt_The_First_5000_Years_LEKHIX_Edition.pdf',
+    image: '/catalog/book-debt.png?v=4',
     featured: true,
     description:
       'Diminutive rooms, grand possibilities. Here anthropologist David Graeber presents a stunning reversal of conventional wisdom: he shows that before there was money, there was debt. For more than 5,000 years, since the beginnings of the first agrarian empires, humans have used elaborate credit systems to buy and sell goods—that is, long before the invention of coins or cash.',
@@ -59,7 +88,8 @@ export const INITIAL_CATALOG: CatalogItem[] = [
       language: 'English',
       isbn: '978-3-89955-698-8',
       reviewerName: 'Christopher Reath',
-      reviewerQuote: 'An essential foundational work on human reciprocity, value, and institutional memory—presented in a tactile 6×9 collector edition.',
+      reviewerQuote:
+        'An essential foundational work on human reciprocity, value, and institutional memory—presented in a tactile 6×9 collector edition.',
     },
     previewPages: [
       {
@@ -84,7 +114,10 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     title: 'The Architecture of Silence',
     category: 'Books',
     price: 1850,
-    image: '/catalog/book-architecture.png?v=3',
+    bookFormat: 'both',
+    ebookPrice: 790,
+    ebookFileName: 'The_Architecture_of_Silence_LEKHIX_Edition.pdf',
+    image: '/catalog/book-architecture.png?v=4',
     featured: true,
     description:
       'An intimate architectural monograph exploring minimalist sacred spaces, raw concrete pavilions, and timber sanctuaries across Kyoto, Zurich, and Ahmedabad. Photographed entirely in natural dawn light and bound in tactile obsidian bookcloth.',
@@ -96,8 +129,9 @@ export const INITIAL_CATALOG: CatalogItem[] = [
       features: 'Linen hardcover, 312 pages',
       language: 'English',
       isbn: '978-3-89955-742-8',
-      reviewerName: 'Aлина Lindqvist',
-      reviewerQuote: 'Every spread breathes with stillness. The 6×9 vertical proportion frames architectural light and shadow with remarkable intimacy.',
+      reviewerName: 'Alina Lindqvist',
+      reviewerQuote:
+        'Every spread breathes with stillness. The 6×9 vertical proportion frames architectural light and shadow with remarkable intimacy.',
     },
     previewPages: [
       {
@@ -118,7 +152,10 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     category: 'Books',
     price: 1650,
     originalPrice: 1950,
-    image: '/catalog/book-typography.png?v=3',
+    bookFormat: 'both',
+    ebookPrice: 720,
+    ebookFileName: 'Forms_of_Modern_Typography_LEKHIX_Edition.pdf',
+    image: '/catalog/book-typography.png?v=4',
     featured: true,
     description:
       'A definitive study of Swiss grid systems, asymmetric page architecture, and contemporary editorial type foundries. Features archival specimen sheets, essays on negative space, and 6×9 trade book layout mathematics.',
@@ -131,7 +168,8 @@ export const INITIAL_CATALOG: CatalogItem[] = [
       language: 'English',
       isbn: '978-3-89955-819-7',
       reviewerName: 'Marcus Weber',
-      reviewerQuote: 'A masterclass in typographic rhythm, margin geometry, and print production craftsmanship.',
+      reviewerQuote:
+        'A masterclass in typographic rhythm, margin geometry, and print production craftsmanship.',
     },
     previewPages: [
       {
@@ -146,7 +184,7 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     title: 'Machined Brass Fountain Pen',
     category: 'Stationery',
     price: 2400,
-    image: '/catalog/stat-brass-pen.png?v=3',
+    image: '/catalog/stat-brass-pen.png?v=4',
     featured: true,
     description:
       'Precision-milled from solid C36000 billet brass with a German iridium fine nib and paired with our 50ml Carbon Archive ink bottle. Engineered for balanced weight and a warm patina that evolves with daily writing.',
@@ -159,7 +197,8 @@ export const INITIAL_CATALOG: CatalogItem[] = [
       language: 'Fine Nib (0.5mm)',
       isbn: 'LKX-ST-0041',
       reviewerName: 'Vikramaditya Sen',
-      reviewerQuote: 'Impeccable machining tolerances and effortless ink flow on uncoated cotton paper.',
+      reviewerQuote:
+        'Impeccable machining tolerances and effortless ink flow on uncoated cotton paper.',
     },
   },
   {
@@ -167,7 +206,10 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     title: 'Spatial Craft & Material',
     category: 'Books',
     price: 1590,
-    image: '/catalog/book-spatial.png?v=3',
+    bookFormat: 'both',
+    ebookPrice: 690,
+    ebookFileName: 'Spatial_Craft_and_Material_LEKHIX_Edition.pdf',
+    image: '/catalog/book-spatial.png?v=4',
     featured: false,
     description:
       'Examining tactile materiality in contemporary interior architecture—travertine stone, unbleached linen, blackened steel, and hand-thrown ceramics across twenty-four residences.',
@@ -180,7 +222,8 @@ export const INITIAL_CATALOG: CatalogItem[] = [
       language: 'English',
       isbn: '978-3-89955-902-6',
       reviewerName: 'Sora Takahashi',
-      reviewerQuote: 'Tactile, restrained, and deeply researched—an indispensable reference for spatial designers.',
+      reviewerQuote:
+        'Tactile, restrained, and deeply researched—an indispensable reference for spatial designers.',
     },
   },
   {
@@ -189,7 +232,7 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     category: 'Stationery',
     price: 890,
     originalPrice: 1100,
-    image: '/catalog/stat-linen-journal.png?v=3',
+    image: '/catalog/stat-linen-journal.png?v=4',
     featured: false,
     description:
       'Lay-flat thread-bound 6×9 inch studio notebook wrapped in Japanese charcoal bookcloth. Filled with 192 pages of 120gsm acid-free fountain-pen friendly ivory paper.',
@@ -208,7 +251,7 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     title: 'Copper Wire Desk Pen Holder',
     category: 'Stationery',
     price: 1250,
-    image: '/catalog/stat-desk-holder.png?v=3',
+    image: '/catalog/stat-desk-holder.png?v=4',
     featured: false,
     description:
       'Hand-brazed geometric copper wire desk vessel paired with cedarwood graphite drafting pencils. Designed to bring architectural order to your reading and writing desk.',
@@ -228,7 +271,7 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     category: 'Stationery',
     price: 450,
     originalPrice: 600,
-    image: '/catalog/stat-paper-clip.png?v=3',
+    image: '/catalog/stat-paper-clip.png?v=4',
     featured: false,
     description:
       'Heavy-gauge tempered spring steel binder clips in matte carbon finish. Ideal for securing manuscripts, looseleaf sketches, and bookmarking 6×9 trade editions.',
@@ -247,7 +290,10 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     title: 'The Nocturnal Botanical Index',
     category: 'Books',
     price: 1720,
-    image: '/catalog/book-botanical.png?v=3',
+    bookFormat: 'both',
+    ebookPrice: 750,
+    ebookFileName: 'The_Nocturnal_Botanical_Index_LEKHIX_Edition.pdf',
+    image: '/catalog/book-botanical.png?v=4',
     featured: false,
     description:
       'An illustrated compendium of rare night-blooming flora, pressed herbarium plates, and botanical essays printed in deep indigo and silver metallic ink on cotton rag paper.',
@@ -267,7 +313,10 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     category: 'Books',
     price: 1680,
     originalPrice: 1990,
-    image: '/catalog/book-minimal-object.png?v=3',
+    bookFormat: 'both',
+    ebookPrice: 740,
+    ebookFileName: 'The_Enduring_Object_LEKHIX_Edition.pdf',
+    image: '/catalog/book-minimal-object.png?v=4',
     featured: false,
     description:
       'A curated archive of twentieth-century industrial design, precision writing instruments, and everyday functional objects designed to last for generations.',
@@ -286,7 +335,7 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     title: 'Archival Cotton Sketchbook',
     category: 'Stationery',
     price: 980,
-    image: '/catalog/stat-linen-journal.png?v=3',
+    image: '/catalog/stat-linen-journal.png?v=4',
     featured: false,
     description:
       'Cold-pressed 180gsm cotton rag sketchbook bound in raw charcoal bookcloth at 6 × 9 inches. Opens 180 degrees flat for architectural drawing and ink wash.',
@@ -305,7 +354,10 @@ export const INITIAL_CATALOG: CatalogItem[] = [
     title: 'Quiet Geometry in Print',
     category: 'Books',
     price: 1540,
-    image: '/catalog/book-spatial.png?v=3',
+    bookFormat: 'ebook',
+    ebookPrice: 590,
+    ebookFileName: 'Quiet_Geometry_in_Print_LEKHIX_eBook.pdf',
+    image: '/catalog/book-spatial.png?v=4',
     featured: false,
     description:
       'Essays and visual studies on proportional systems, bookbinding traditions, and architectural page layouts from Renaissance folios to modern 6×9 trade editions.',
@@ -313,8 +365,8 @@ export const INITIAL_CATALOG: CatalogItem[] = [
       author: 'Nandini Rao',
       publisher: 'LEKHIX Press',
       releaseDate: 'October 2026',
-      format: '6 × 9 in',
-      features: 'Hardcover, 224 pages',
+      format: '6 × 9 in · PDF Edition',
+      features: 'Digital PDF, 224 pages',
       language: 'English',
       isbn: '978-3-89955-994-1',
     },
@@ -325,9 +377,17 @@ interface CatalogContextType {
   catalog: CatalogItem[];
   saveCatalog: (newItems: CatalogItem[]) => Promise<void>;
   cart: CartItem[];
-  addToCart: (product: CatalogItem, qty?: number) => void;
-  removeFromCart: (productId: string) => void;
-  updateCartQuantity: (productId: string, qty: number) => void;
+  addToCart: (
+    product: CatalogItem,
+    qty?: number,
+    selectedFormat?: 'physical' | 'ebook'
+  ) => void;
+  removeFromCart: (productId: string, selectedFormat?: 'physical' | 'ebook') => void;
+  updateCartQuantity: (
+    productId: string,
+    qty: number,
+    selectedFormat?: 'physical' | 'ebook'
+  ) => void;
   clearCart: () => void;
   cartCount: number;
   cartTotal: number;
@@ -339,13 +399,39 @@ const CatalogContext = createContext<CatalogContextType | undefined>(undefined);
 
 const CART_STORAGE_KEY = 'lekhix_cart_v1';
 
+function normalizeCatalogItems(items: CatalogItem[]): CatalogItem[] {
+  return items.map((item) => {
+    if (item.category === 'Books') {
+      const bookFormat: BookFormat = item.bookFormat || 'both';
+      const ebookPrice =
+        typeof item.ebookPrice === 'number' && item.ebookPrice > 0
+          ? item.ebookPrice
+          : bookFormat === 'ebook'
+          ? item.price
+          : Math.round(item.price * 0.45);
+      return {
+        ...item,
+        bookFormat,
+        ebookPrice,
+      };
+    }
+    return item;
+  });
+}
+
 export function CatalogProvider({ children }: { children: ReactNode }) {
   const [catalog, setCatalog] = useState<CatalogItem[]>(INITIAL_CATALOG);
   const [cart, setCart] = useState<CartItem[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
       const saved = localStorage.getItem(CART_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map((c: any) => ({
+        ...c,
+        selectedFormat: c.selectedFormat === 'ebook' ? 'ebook' : 'physical',
+      }));
     } catch {
       return [];
     }
@@ -361,7 +447,7 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         if (snap.exists()) {
           const data = snap.data();
           if (Array.isArray(data.items) && data.items.length > 0) {
-            setCatalog(data.items);
+            setCatalog(normalizeCatalogItems(data.items));
           }
         }
       },
@@ -382,11 +468,12 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
   }, [cart]);
 
   const saveCatalog = async (newItems: CatalogItem[]) => {
-    setCatalog(newItems);
+    const normalized = normalizeCatalogItems(newItems);
+    setCatalog(normalized);
     const path = 'appData/catalog';
     try {
       await setDoc(doc(db, 'appData', 'catalog'), {
-        items: newItems,
+        items: normalized,
         updatedAt: new Date().toISOString(),
       });
     } catch (error) {
@@ -394,32 +481,63 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const addToCart = (product: CatalogItem, qty = 1) => {
+  const addToCart = (
+    product: CatalogItem,
+    qty = 1,
+    selectedFormat?: 'physical' | 'ebook'
+  ) => {
+    const format: 'physical' | 'ebook' =
+      selectedFormat ||
+      (product.category === 'Books' && product.bookFormat === 'ebook'
+        ? 'ebook'
+        : 'physical');
+
     setCart((prev) => {
-      const existingIndex = prev.findIndex((i) => i.product.id === product.id);
+      const existingIndex = prev.findIndex(
+        (i) => i.product.id === product.id && i.selectedFormat === format
+      );
       if (existingIndex > -1) {
         const updated = [...prev];
         updated[existingIndex] = {
           ...updated[existingIndex],
+          product,
           quantity: updated[existingIndex].quantity + qty,
         };
         return updated;
       }
-      return [...prev, { product, quantity: qty }];
+      return [...prev, { product, quantity: qty, selectedFormat: format }];
     });
   };
 
-  const removeFromCart = (productId: string) => {
-    setCart((prev) => prev.filter((i) => i.product.id !== productId));
+  const removeFromCart = (
+    productId: string,
+    selectedFormat?: 'physical' | 'ebook'
+  ) => {
+    setCart((prev) =>
+      prev.filter((i) =>
+        selectedFormat
+          ? !(i.product.id === productId && i.selectedFormat === selectedFormat)
+          : i.product.id !== productId
+      )
+    );
   };
 
-  const updateCartQuantity = (productId: string, qty: number) => {
+  const updateCartQuantity = (
+    productId: string,
+    qty: number,
+    selectedFormat?: 'physical' | 'ebook'
+  ) => {
     if (qty <= 0) {
-      removeFromCart(productId);
+      removeFromCart(productId, selectedFormat);
       return;
     }
     setCart((prev) =>
-      prev.map((i) => (i.product.id === productId ? { ...i, quantity: qty } : i))
+      prev.map((i) =>
+        i.product.id === productId &&
+        (!selectedFormat || i.selectedFormat === selectedFormat)
+          ? { ...i, quantity: qty }
+          : i
+      )
     );
   };
 
@@ -427,7 +545,8 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const cartTotal = cart.reduce(
-    (sum, item) => sum + Number(item.product.price) * item.quantity,
+    (sum, item) =>
+      sum + getEffectivePrice(item.product, item.selectedFormat) * item.quantity,
     0
   );
 

@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'fs';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
@@ -13,8 +14,40 @@ const PORT = 3000;
 
 app.use(express.json({ limit: '50mb' }));
 
-// Setup Multer for image uploads
+// Ensure public/ebooks directory exists and is served statically
+const ebooksDir = path.join(process.cwd(), 'public', 'ebooks');
+if (!fs.existsSync(ebooksDir)) {
+  fs.mkdirSync(ebooksDir, { recursive: true });
+}
+app.use('/ebooks', express.static(ebooksDir));
+
+// Setup Multer for image and PDF uploads
 const upload = multer({ storage: multer.memoryStorage() });
+
+// API Route: Upload eBook PDF from Admin Console
+app.post('/api/upload-pdf', (req, res) => {
+  try {
+    const { fileName, base64Data } = req.body;
+    if (!base64Data) {
+      return res.status(400).json({ error: 'Missing PDF data' });
+    }
+    const cleanBase = String(fileName || 'ebook.pdf')
+      .replace(/\.pdf$/i, '')
+      .replace(/[^a-zA-Z0-9_-]/g, '-')
+      .slice(0, 60);
+    const finalName = `${cleanBase}-${Date.now()}.pdf`;
+    const rawBase64 = String(base64Data).replace(/^data:application\/pdf;base64,/, '');
+    const buffer = Buffer.from(rawBase64, 'base64');
+    fs.writeFileSync(path.join(ebooksDir, finalName), buffer);
+    return res.json({
+      url: `/ebooks/${finalName}`,
+      fileName: fileName || finalName,
+    });
+  } catch (err: any) {
+    console.error('PDF upload error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to save PDF' });
+  }
+});
 
 let aiClient: GoogleGenAI | null = null;
 function getAI(): GoogleGenAI {

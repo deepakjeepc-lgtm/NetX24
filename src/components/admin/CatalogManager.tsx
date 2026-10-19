@@ -1,6 +1,21 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Edit3, Check, X, Upload, Star, RotateCcw } from 'lucide-react';
-import { CatalogItem, INITIAL_CATALOG, useCatalog } from '../../context/CatalogContext';
+import {
+  Plus,
+  Trash2,
+  Edit3,
+  Check,
+  X,
+  Upload,
+  Star,
+  RotateCcw,
+  FileText,
+} from 'lucide-react';
+import {
+  BookFormat,
+  CatalogItem,
+  INITIAL_CATALOG,
+  useCatalog,
+} from '../../context/CatalogContext';
 import ProductImage6x9 from '../ProductImage6x9';
 import { useToast } from '../../context/ToastContext';
 
@@ -10,7 +25,11 @@ const EMPTY_ITEM: CatalogItem = {
   category: 'Books',
   price: 1200,
   originalPrice: undefined,
-  image: '/catalog/book-debt.png',
+  bookFormat: 'both',
+  ebookPrice: 550,
+  ebookPdfUrl: '',
+  ebookFileName: '',
+  image: '/catalog/book-debt.png?v=4',
   featured: false,
   description: '',
   specs: {
@@ -26,26 +45,35 @@ const EMPTY_ITEM: CatalogItem = {
   },
 };
 
+type AdminFilterCategory = 'All' | 'Books' | 'eBooks' | 'Stationery';
+
 export default function CatalogManager() {
   const { catalog, saveCatalog } = useCatalog();
   const { showToast } = useToast();
 
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [filterCat, setFilterCat] = useState<'All' | 'Books' | 'Stationery'>('All');
+  const [filterCat, setFilterCat] = useState<AdminFilterCategory>('All');
   const [saving, setSaving] = useState(false);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
 
-  const startCreate = () => {
+  const startCreate = (presetFormat?: BookFormat) => {
     setIsCreating(true);
     setEditingItem({
       ...EMPTY_ITEM,
       id: `item-${Date.now()}`,
+      category: 'Books',
+      bookFormat: presetFormat || 'both',
     });
   };
 
   const startEdit = (item: CatalogItem) => {
     setIsCreating(false);
-    setEditingItem(JSON.parse(JSON.stringify(item)));
+    const copy: CatalogItem = JSON.parse(JSON.stringify(item));
+    if (copy.category === 'Books' && !copy.bookFormat) {
+      copy.bookFormat = 'both';
+    }
+    setEditingItem(copy);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -81,15 +109,109 @@ export default function CatalogManager() {
     reader.readAsDataURL(file);
   };
 
+  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingItem) return;
+
+    if (!file.name.toLowerCase().endsWith('.pdf') && file.type !== 'application/pdf') {
+      showToast({
+        message: 'Please select a valid .pdf file for the eBook.',
+        type: 'error',
+        duration: 3000,
+      });
+      return;
+    }
+
+    setUploadingPdf(true);
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const base64Data = ev.target?.result as string;
+      try {
+        const res = await fetch('/api/upload-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: file.name,
+            base64Data,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.url) {
+          setEditingItem((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  ebookPdfUrl: data.url,
+                  ebookFileName: file.name,
+                }
+              : null
+          );
+          showToast({
+            message: `PDF uploaded: ${file.name}`,
+            type: 'success',
+            duration: 3000,
+          });
+        } else {
+          throw new Error(data.error || 'Upload failed');
+        }
+      } catch {
+        // Fallback for small PDFs if offline
+        if (file.size <= 650 * 1024) {
+          setEditingItem((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  ebookPdfUrl: base64Data,
+                  ebookFileName: file.name,
+                }
+              : null
+          );
+          showToast({
+            message: `PDF attached: ${file.name}`,
+            type: 'success',
+            duration: 3000,
+          });
+        } else {
+          showToast({
+            message: 'PDF upload failed. You can also paste an external PDF link.',
+            type: 'error',
+            duration: 3500,
+          });
+        }
+      } finally {
+        setUploadingPdf(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingItem || !editingItem.title.trim()) return;
 
     setSaving(true);
     try {
+      const cleanedItem: CatalogItem = { ...editingItem };
+      if (cleanedItem.category === 'Books') {
+        cleanedItem.bookFormat = cleanedItem.bookFormat || 'both';
+        if (cleanedItem.bookFormat === 'ebook') {
+          cleanedItem.ebookPrice = cleanedItem.price;
+        } else if (
+          cleanedItem.bookFormat === 'both' &&
+          (!cleanedItem.ebookPrice || cleanedItem.ebookPrice <= 0)
+        ) {
+          cleanedItem.ebookPrice = Math.round(cleanedItem.price * 0.5);
+        }
+      } else {
+        delete cleanedItem.bookFormat;
+        delete cleanedItem.ebookPrice;
+        delete cleanedItem.ebookPdfUrl;
+        delete cleanedItem.ebookFileName;
+      }
+
       const updated = isCreating
-        ? [editingItem, ...catalog]
-        : catalog.map((i) => (i.id === editingItem.id ? editingItem : i));
+        ? [cleanedItem, ...catalog]
+        : catalog.map((i) => (i.id === cleanedItem.id ? cleanedItem : i));
       await saveCatalog(updated);
       setEditingItem(null);
       setIsCreating(false);
@@ -119,15 +241,41 @@ export default function CatalogManager() {
   const handleRestoreDefaults = async () => {
     await saveCatalog(INITIAL_CATALOG);
     showToast({
-      message: 'Default LEKHIX Books & Stationery catalog restored.',
+      message: 'Default LEKHIX Books, eBooks & Stationery catalog restored.',
       type: 'info',
       duration: 3000,
     });
   };
 
-  const visibleItems = catalog.filter((i) =>
-    filterCat === 'All' ? true : i.category === filterCat
-  );
+  const ebooksCount = catalog.filter(
+    (i) =>
+      i.category === 'Books' &&
+      (i.bookFormat === 'ebook' || i.bookFormat === 'both' || !i.bookFormat)
+  ).length;
+
+  const visibleItems = catalog.filter((i) => {
+    if (filterCat === 'All') return true;
+    if (filterCat === 'eBooks') {
+      return (
+        i.category === 'Books' &&
+        (i.bookFormat === 'ebook' || i.bookFormat === 'both' || !i.bookFormat)
+      );
+    }
+    return i.category === filterCat;
+  });
+
+  const getTabCount = (cat: AdminFilterCategory) => {
+    if (cat === 'All') return catalog.length;
+    if (cat === 'eBooks') return ebooksCount;
+    return catalog.filter((i) => i.category === cat).length;
+  };
+
+  const getFormatLabel = (item: CatalogItem) => {
+    if (item.category !== 'Books') return item.specs.format;
+    if (item.bookFormat === 'ebook') return 'EBOOK (PDF)';
+    if (item.bookFormat === 'physical') return 'PHYSICAL (6×9 IN)';
+    return 'PHYSICAL + EBOOK PDF';
+  };
 
   return (
     <div className="space-y-8">
@@ -135,10 +283,10 @@ export default function CatalogManager() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#E5E5E0] dark:border-[#26262B]">
         <div>
           <h2 className="font-editorial text-2xl font-semibold text-[#111111] dark:text-white">
-            Books &amp; Stationery Catalog
+            Books, eBooks (PDF) &amp; Stationery Catalog
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-            All previews are strictly formatted to 6 × 9 inches (2:3 proportion).
+            All previews are strictly formatted to 6 × 9 inches (2:3 proportion). Books can be sold as Physical, eBook (PDF), or Both.
           </p>
         </div>
 
@@ -146,14 +294,21 @@ export default function CatalogManager() {
           <button
             type="button"
             onClick={handleRestoreDefaults}
-            className="px-4 py-2.5 border border-[#D4D4D0] dark:border-[#2E2E36] text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300 hover:border-[#111111] dark:hover:border-white transition-colors cursor-pointer inline-flex items-center gap-2"
+            className="px-4 py-2.5 border border-[#D4D4D0] dark:border-[#2E2E36] text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-300 hover:border-[#111111] dark:hover:border-white transition-colors cursor-pointer inline-flex items-center gap-2 whitespace-nowrap"
           >
             <RotateCcw className="w-3.5 h-3.5" /> Reset Defaults
           </button>
           <button
             type="button"
-            onClick={startCreate}
-            className="px-5 py-2.5 bg-[#111111] dark:bg-white text-white dark:text-[#111111] text-xs font-bold uppercase tracking-[0.16em] hover:opacity-85 transition-opacity cursor-pointer inline-flex items-center gap-2"
+            onClick={() => startCreate('ebook')}
+            className="px-4 py-2.5 border border-[#111111] dark:border-white text-xs font-bold uppercase tracking-[0.14em] text-[#111111] dark:text-white hover:bg-[#111111] hover:text-white dark:hover:bg-white dark:hover:text-[#111111] transition-colors cursor-pointer inline-flex items-center gap-2 whitespace-nowrap"
+          >
+            <FileText className="w-3.5 h-3.5" /> + Add eBook (PDF)
+          </button>
+          <button
+            type="button"
+            onClick={() => startCreate('both')}
+            className="px-5 py-2.5 bg-[#111111] dark:bg-white text-white dark:text-[#111111] text-xs font-bold uppercase tracking-[0.16em] hover:opacity-85 transition-opacity cursor-pointer inline-flex items-center gap-2 whitespace-nowrap"
           >
             <Plus className="w-3.5 h-3.5" /> Add Book / Stationery
           </button>
@@ -220,7 +375,7 @@ export default function CatalogManager() {
               </div>
             </div>
 
-            {/* Right: Core Metadata & Gestalten Specs */}
+            {/* Right: Core Metadata, Book Format Option (Physical vs eBook PDF), & Gestalten Specs */}
             <div className="lg:col-span-8 space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -245,12 +400,17 @@ export default function CatalogManager() {
                   </label>
                   <select
                     value={editingItem.category}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const nextCat = e.target.value as 'Books' | 'Stationery';
                       setEditingItem({
                         ...editingItem,
-                        category: e.target.value as 'Books' | 'Stationery',
-                      })
-                    }
+                        category: nextCat,
+                        bookFormat:
+                          nextCat === 'Books'
+                            ? editingItem.bookFormat || 'both'
+                            : undefined,
+                      });
+                    }}
                     className="w-full px-3.5 py-2.5 text-xs bg-[#FFFFFF] dark:bg-[#141418] border border-[#D4D4D0] dark:border-[#2E2E36] outline-none"
                   >
                     <option value="Books">Books</option>
@@ -258,9 +418,167 @@ export default function CatalogManager() {
                   </select>
                 </div>
 
+                {/* Book Format Selector (Physical vs eBook PDF vs Both) */}
+                {editingItem.category === 'Books' && (
+                  <div className="sm:col-span-2 p-4 bg-[#FAFAFA] dark:bg-[#18181D] border border-[#E5E5E0] dark:border-[#26262B] space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-[0.18em] text-[#111111] dark:text-white mb-2">
+                        Book Edition Type (Physical vs eBook PDF)
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        {(
+                          [
+                            {
+                              id: 'physical',
+                              label: 'Physical Only (6×9 Hardcover)',
+                            },
+                            {
+                              id: 'ebook',
+                              label: 'eBook Only (PDF Download)',
+                            },
+                            {
+                              id: 'both',
+                              label: 'Both (Physical + eBook PDF)',
+                            },
+                          ] as const
+                        ).map((opt) => {
+                          const active =
+                            (editingItem.bookFormat || 'both') === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() =>
+                                setEditingItem({
+                                  ...editingItem,
+                                  bookFormat: opt.id,
+                                })
+                              }
+                              className={`px-3 py-2.5 text-xs font-bold uppercase tracking-wider border text-left transition-colors cursor-pointer ${
+                                active
+                                  ? 'bg-[#111111] text-white border-[#111111] dark:bg-white dark:text-[#111111] dark:border-white'
+                                  : 'bg-transparent text-zinc-600 dark:text-zinc-300 border-[#D4D4D0] dark:border-[#2E2E36] hover:border-[#111111] dark:hover:border-white'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* PDF Upload & URL Section when eBook or Both is selected */}
+                    {(editingItem.bookFormat === 'ebook' ||
+                      editingItem.bookFormat === 'both' ||
+                      !editingItem.bookFormat) && (
+                      <div className="pt-3 border-t border-[#E5E5E0] dark:border-[#26262B] grid grid-cols-1 sm:grid-cols-12 gap-4 items-end">
+                        {editingItem.bookFormat === 'both' && (
+                          <div className="sm:col-span-4">
+                            <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500 mb-1.5">
+                              eBook PDF Price (₹ INR)
+                            </label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={editingItem.ebookPrice || ''}
+                              onChange={(e) =>
+                                setEditingItem({
+                                  ...editingItem,
+                                  ebookPrice: Number(e.target.value),
+                                })
+                              }
+                              placeholder="e.g. 590"
+                              className="w-full px-3 py-2 text-xs bg-[#FFFFFF] dark:bg-[#141418] border border-[#D4D4D0] dark:border-[#2E2E36] outline-none tabular-nums"
+                            />
+                          </div>
+                        )}
+
+                        <div
+                          className={
+                            editingItem.bookFormat === 'both'
+                              ? 'sm:col-span-4'
+                              : 'sm:col-span-6'
+                          }
+                        >
+                          <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500 mb-1.5">
+                            Upload eBook PDF File
+                          </label>
+                          <label className="w-full px-3.5 py-2 border border-[#111111] dark:border-white text-xs font-bold uppercase tracking-wider text-center cursor-pointer hover:bg-[#111111] hover:text-white dark:hover:bg-white dark:hover:text-[#111111] transition-colors inline-flex items-center justify-center gap-2 whitespace-nowrap">
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>
+                              {uploadingPdf
+                                ? 'Uploading PDF...'
+                                : editingItem.ebookFileName
+                                ? 'Replace PDF File'
+                                : 'Choose .PDF File'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="application/pdf,.pdf"
+                              onChange={handlePdfUpload}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+
+                        <div
+                          className={
+                            editingItem.bookFormat === 'both'
+                              ? 'sm:col-span-4'
+                              : 'sm:col-span-6'
+                          }
+                        >
+                          <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500 mb-1.5">
+                            Or External PDF Download URL
+                          </label>
+                          <input
+                            type="text"
+                            value={editingItem.ebookPdfUrl || ''}
+                            onChange={(e) =>
+                              setEditingItem({
+                                ...editingItem,
+                                ebookPdfUrl: e.target.value,
+                              })
+                            }
+                            placeholder="https://... or /ebooks/file.pdf"
+                            className="w-full px-3 py-2 text-xs bg-[#FFFFFF] dark:bg-[#141418] border border-[#D4D4D0] dark:border-[#2E2E36] outline-none"
+                          />
+                        </div>
+
+                        {(editingItem.ebookFileName || editingItem.ebookPdfUrl) && (
+                          <div className="sm:col-span-12 flex items-center justify-between text-[11px] text-zinc-600 dark:text-zinc-300 bg-[#FFFFFF] dark:bg-[#141418] px-3 py-2 border border-[#E5E5E0] dark:border-[#26262B]">
+                            <span className="truncate">
+                              Attached PDF:{' '}
+                              <strong className="text-[#111111] dark:text-white">
+                                {editingItem.ebookFileName || editingItem.ebookPdfUrl}
+                              </strong>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditingItem({
+                                  ...editingItem,
+                                  ebookPdfUrl: '',
+                                  ebookFileName: '',
+                                })
+                              }
+                              className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 hover:text-red-600 ml-3 cursor-pointer whitespace-nowrap"
+                            >
+                              Clear PDF
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-500 mb-1.5">
-                    Price (₹ INR)
+                    {editingItem.category === 'Books' &&
+                    editingItem.bookFormat === 'ebook'
+                      ? 'eBook PDF Price (₹ INR)'
+                      : 'Physical Price (₹ INR)'}
                   </label>
                   <input
                     type="number"
@@ -457,19 +775,19 @@ export default function CatalogManager() {
         </form>
       )}
 
-      {/* Filter Tabs */}
-      <div className="flex items-center gap-6 text-xs font-bold uppercase tracking-[0.18em]">
-        {(['All', 'Books', 'Stationery'] as const).map((cat) => (
+      {/* Filter Tabs: All | Books | eBooks | Stationery */}
+      <div className="flex flex-wrap items-center gap-6 text-xs font-bold uppercase tracking-[0.18em]">
+        {(['All', 'Books', 'eBooks', 'Stationery'] as const).map((cat) => (
           <button
             key={cat}
             onClick={() => setFilterCat(cat)}
-            className={`pb-2 border-b-2 transition-colors cursor-pointer ${
+            className={`pb-2 border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
               filterCat === cat
                 ? 'border-[#111111] dark:border-white text-[#111111] dark:text-white'
                 : 'border-transparent text-zinc-400 hover:text-[#111111] dark:hover:text-white'
             }`}
           >
-            {cat} ({cat === 'All' ? catalog.length : catalog.filter((i) => i.category === cat).length})
+            {cat === 'eBooks' ? 'eBooks (PDF)' : cat} ({getTabCount(cat)})
           </button>
         ))}
       </div>
@@ -495,14 +813,25 @@ export default function CatalogManager() {
               <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-zinc-400 mb-1">
                 <span>{item.category}</span>
                 <span>·</span>
-                <span className="tabular-nums">{item.specs.format}</span>
+                <span className="tabular-nums text-[#111111] dark:text-zinc-300 font-semibold">
+                  {getFormatLabel(item)}
+                </span>
               </div>
               <h4 className="text-sm font-bold text-[#111111] dark:text-white truncate">
                 {item.title}
               </h4>
-              <p className="text-xs font-semibold tabular-nums text-zinc-600 dark:text-zinc-300 mt-1">
-                ₹{item.price.toLocaleString('en-IN')}
-              </p>
+              <div className="flex items-baseline gap-3 mt-1 text-xs tabular-nums">
+                <span className="font-semibold text-zinc-700 dark:text-zinc-200">
+                  ₹{item.price.toLocaleString('en-IN')}
+                </span>
+                {item.category === 'Books' &&
+                  item.bookFormat === 'both' &&
+                  item.ebookPrice && (
+                    <span className="text-[11px] text-zinc-400">
+                      · eBook PDF ₹{item.ebookPrice.toLocaleString('en-IN')}
+                    </span>
+                  )}
+              </div>
 
               <div className="flex items-center gap-3 mt-4 pt-3 border-t border-[#ECECE7] dark:border-[#222227]">
                 <button
