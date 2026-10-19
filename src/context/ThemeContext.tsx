@@ -23,8 +23,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       document.documentElement.style.colorScheme = 'light';
     }
 
-    // Keep mobile browser top bar / status bar color strictly in sync with active theme
-    const themeColor = isDarkMode ? '#0b0f19' : '#f1f5f9';
+    const themeColor = isDarkMode ? '#0A0A0C' : '#FAFAFA';
     let metaTag = document.querySelector('meta[name="theme-color"]');
     if (!metaTag) {
       metaTag = document.createElement('meta');
@@ -35,11 +34,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Check initial preference
     const savedTheme = localStorage.getItem('theme') as Theme | null;
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const initialTheme: Theme = savedTheme === 'dark' || (!savedTheme && prefersDark) ? 'dark' : 'light';
-    
     setTheme(initialTheme);
     applyTheme(initialTheme);
   }, []);

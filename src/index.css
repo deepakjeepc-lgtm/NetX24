@@ -3,19 +3,20 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "Inter", system-ui, sans-serif;
-  --font-display: "Chakra Petch", "Inter", system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-serif: "Cormorant Garamond", Georgia, serif;
+  --font-display: "Cormorant Garamond", Georgia, serif;
 }
 
 html {
-  background-color: #f1f5f9;
-  color: #1e293b;
+  background-color: #FAFAFA;
+  color: #111111;
   color-scheme: light;
 }
 
 html.dark {
-  background-color: #0b0f19;
-  color: #f8fafc;
+  background-color: #0A0A0C;
+  color: #F5F5F7;
   color-scheme: dark;
 }
 
@@ -25,46 +26,35 @@ body {
   min-height: 100vh;
   margin: 0;
   padding: 0;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-@layer utilities {
+.font-editorial {
+  font-family: var(--font-serif);
 }
 
-@keyframes gradient-border {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
-
-/* Custom Scrollbar */
+/* Subtle custom scrollbar */
 html {
   scrollbar-width: thin;
-  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+  scrollbar-color: rgba(113, 113, 122, 0.35) transparent;
 }
 .dark html {
-  scrollbar-color: rgba(71, 85, 105, 0.5) transparent;
+  scrollbar-color: rgba(82, 82, 91, 0.45) transparent;
 }
 ::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: rgba(156, 163, 175, 0.5);
-  border-radius: 10px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(156, 163, 175, 0.8);
-}
-.dark ::-webkit-scrollbar-thumb {
-  background-color: rgba(71, 85, 105, 0.5);
-}
-.dark ::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(71, 85, 105, 0.8);
+  background-color: rgba(113, 113, 122, 0.35);
 }
 .hide-scrollbar {
   -ms-overflow-style: none;

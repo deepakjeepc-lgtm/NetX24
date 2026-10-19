@@ -1,12 +1,12 @@
 {
-  "name": "NetX24 Cyber Cafe",
-  "short_name": "NetX24",
-  "description": "Cyber cafe services and free online tools",
+  "name": "LEKHIX — Books & Stationery",
+  "short_name": "LEKHIX",
+  "description": "Luxury Editorial Books & Architectural Stationery Store",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "background_color": "#0A0A0C",
+  "theme_color": "#0A0A0C",
   "icons": [
     {
       "src": "/icon-192.png",

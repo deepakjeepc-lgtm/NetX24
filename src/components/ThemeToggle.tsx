@@ -8,9 +8,9 @@ interface ThemeToggleProps {
   iconClassName?: string;
 }
 
-export default function ThemeToggle({ 
-  className = "p-2 rounded-full text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors cursor-pointer", 
-  iconClassName = "w-5 h-5" 
+export default function ThemeToggle({
+  className = 'p-2 text-[#111111] dark:text-[#F5F5F7] hover:opacity-65 transition-opacity cursor-pointer',
+  iconClassName = 'w-4 h-4',
 }: ThemeToggleProps) {
   const { isDark, toggleTheme } = useTheme();
 
@@ -23,11 +23,14 @@ export default function ThemeToggle({
     <button
       onClick={handleToggle}
       className={className}
-      aria-label="Toggle Dark Mode"
-      title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+      aria-label="Toggle Dark or Light Theme"
+      title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
     >
-      {isDark ? <Sun className={iconClassName} strokeWidth={2} /> : <Moon className={iconClassName} strokeWidth={2} />}
+      {isDark ? (
+        <Sun className={iconClassName} strokeWidth={1.75} />
+      ) : (
+        <Moon className={iconClassName} strokeWidth={1.75} />
+      )}
     </button>
   );
 }
-

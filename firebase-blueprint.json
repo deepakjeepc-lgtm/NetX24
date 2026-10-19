@@ -2,82 +2,56 @@
   "entities": {
     "ContactSubmission": {
       "title": "Contact Submission",
-      "description": "Messages submitted from contact form",
+      "description": "Messages submitted from customer inquiries",
       "type": "object",
       "properties": {
-        "name": { "type": "string", "description": "Customer name" },
-        "phone": { "type": "string", "description": "Customer phone number" },
-        "message": { "type": "string", "description": "Inquiry message" },
+        "name": { "type": "string", "description": "Customer name", "maxLength": 150 },
+        "phone": { "type": "string", "description": "Customer phone or email", "maxLength": 100 },
+        "message": { "type": "string", "description": "Inquiry message", "maxLength": 5000 },
         "timestamp": { "type": "string", "description": "Server submission timestamp" }
       },
       "required": ["name", "phone", "message"]
     },
     "Order": {
       "title": "Order",
-      "description": "Orders placed by customers",
+      "description": "Book and stationery orders placed by customers",
       "type": "object",
       "properties": {
-        "orderId": { "type": "string", "description": "Unique order ID" },
-        "paymentId": { "type": "string", "description": "Payment transaction ID" },
-        "customerName": { "type": "string", "description": "Customer name" },
-        "customerPhone": { "type": "string", "description": "Customer phone" },
-        "itemName": { "type": "string", "description": "Product or note name" },
-        "itemType": { "type": "string", "description": "Service or IGNOU Notes" },
+        "orderId": { "type": "string", "description": "Unique order ID", "maxLength": 100 },
+        "paymentId": { "type": "string", "description": "Payment transaction ID", "maxLength": 120 },
+        "customerName": { "type": "string", "description": "Customer name", "maxLength": 150 },
+        "customerPhone": { "type": "string", "description": "Customer phone", "maxLength": 50 },
+        "customerAddress": { "type": "string", "description": "Delivery address", "maxLength": 500 },
+        "itemName": { "type": "string", "description": "Order summary title", "maxLength": 500 },
+        "itemType": { "type": "string", "description": "Books or Stationery category", "maxLength": 100 },
         "amount": { "type": "number", "description": "Order total in INR" },
-        "status": { "type": "string", "description": "Order payment status" },
+        "status": { "type": "string", "description": "Order status" },
         "createdAt": { "type": "string", "description": "Creation timestamp" }
       },
       "required": ["orderId", "customerName", "customerPhone", "itemName", "amount", "status"]
     },
-    "AppData": {
-      "title": "Application Data",
-      "description": "Global application data such as IGNOU notes and services rate card",
+    "CatalogDoc": {
+      "title": "Catalog Document",
+      "description": "Storefront books and stationery catalog stored in /appData/catalog",
       "type": "object",
       "properties": {
-        "assignments": { "type": "array", "description": "IGNOU assignments list" },
-        "projects": { "type": "array", "description": "IGNOU projects list" },
-        "levels": { "type": "array", "description": "IGNOU levels list" },
-        "items": { "type": "array", "description": "Services list" }
-      }
-    },
-    "Stats": {
-      "title": "Usage Statistics",
-      "description": "Aggregated counter stats such as tools used count",
-      "type": "object",
-      "properties": {
-        "count": { "type": "number", "description": "Usage counter" }
-      }
-    },
-    "Level": {
-      "title": "Level Data",
-      "description": "Educational levels and course metadata",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string", "description": "Level ID" },
-        "name": { "type": "string", "description": "Level name" }
+        "items": { "type": "array", "description": "Array of Books and Stationery products with 6x9 cover previews and specs" },
+        "updatedAt": { "type": "string", "description": "Last modified timestamp" }
       }
     }
   },
   "firestore": {
     "/contactSubmissions/{submissionId}": {
       "schema": "ContactSubmission",
-      "description": "Submissions from users inquiring about services"
+      "description": "Customer inquiries"
     },
     "/orders/{orderId}": {
       "schema": "Order",
-      "description": "Customer orders and payment records"
+      "description": "Customer bookstore and stationery orders"
     },
     "/appData/{docId}": {
-      "schema": "AppData",
-      "description": "Configurable site content like services and IGNOU database"
-    },
-    "/stats/{statId}": {
-      "schema": "Stats",
-      "description": "System counter documents for public tools"
-    },
-    "/levels/{levelId}": {
-      "schema": "Level",
-      "description": "Course levels"
+      "schema": "CatalogDoc",
+      "description": "Configurable Books and Stationery catalog data"
     }
   }
 }
