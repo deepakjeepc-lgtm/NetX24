@@ -48,13 +48,10 @@ export default function ContactSubmissions() {
 
   return (
     <div className="bg-[#FFFFFF] dark:bg-[#141418] border border-[#E5E5E0] dark:border-[#26262B] overflow-hidden">
-      <div className="px-6 py-5 border-b border-[#E5E5E0] dark:border-[#26262B]">
-        <h2 className="font-editorial text-xl font-semibold text-[#111111] dark:text-white">
-          Client Inquiries
+      <div className="px-5 sm:px-6 py-4 border-b border-[#E5E5E0] dark:border-[#26262B]">
+        <h2 className="text-xs sm:text-sm font-bold uppercase tracking-[0.2em] text-[#111111] dark:text-white">
+          INQUIRIES
         </h2>
-        <p className="text-xs text-zinc-500 mt-0.5">
-          Messages received from the storefront footer
-        </p>
       </div>
 
       <div className="overflow-x-auto">

@@ -43,15 +43,10 @@ export default function OrdersView() {
 
   return (
     <div className="bg-[#FFFFFF] dark:bg-[#141418] border border-[#E5E5E0] dark:border-[#26262B] overflow-hidden">
-      <div className="px-6 py-5 border-b border-[#E5E5E0] dark:border-[#26262B] flex items-center justify-between">
-        <div>
-          <h2 className="font-editorial text-xl font-semibold text-[#111111] dark:text-white">
-            Order Ledger
-          </h2>
-          <p className="text-xs text-zinc-500 mt-0.5">
-            Customer book &amp; stationery acquisitions
-          </p>
-        </div>
+      <div className="px-5 sm:px-6 py-4 border-b border-[#E5E5E0] dark:border-[#26262B] flex items-center justify-between">
+        <h2 className="text-xs sm:text-sm font-bold uppercase tracking-[0.2em] text-[#111111] dark:text-white">
+          ORDERS
+        </h2>
         <span className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500 tabular-nums">
           Total: {orders.length}
         </span>

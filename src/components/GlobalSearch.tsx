@@ -40,7 +40,14 @@ export default function GlobalSearch({ onSelectProduct }: GlobalSearchProps) {
           item.title.toLowerCase().includes(searchLower) ||
           item.category.toLowerCase().includes(searchLower) ||
           item.specs.author.toLowerCase().includes(searchLower) ||
-          item.specs.isbn.toLowerCase().includes(searchLower)
+          item.specs.isbn.toLowerCase().includes(searchLower) ||
+          (item.ignouYear || '').toLowerCase().includes(searchLower) ||
+          (item.ignouProgramCode || '').toLowerCase().includes(searchLower) ||
+          (item.ignouProgramName || '').toLowerCase().includes(searchLower) ||
+          (item.ignouCourseCode || '').toLowerCase().includes(searchLower) ||
+          (item.ignouCourseTitle || '').toLowerCase().includes(searchLower) ||
+          (item.ignouDegree || '').toLowerCase().includes(searchLower) ||
+          (item.ignouMaterialType || '').toLowerCase().includes(searchLower)
       )
     : catalog.slice(0, 4);
 
@@ -60,7 +67,7 @@ export default function GlobalSearch({ onSelectProduct }: GlobalSearchProps) {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search books, authors, ISBN, or stationery..."
+            placeholder="Search by Title, IGNOU Program (BAAHD, BAM, BCA_NEW), Year, Course Code, or ISBN..."
             className="flex-1 bg-transparent border-none outline-none px-4 text-sm text-[#111111] dark:text-[#F5F5F7] placeholder:text-zinc-400"
           />
           <button
@@ -79,7 +86,7 @@ export default function GlobalSearch({ onSelectProduct }: GlobalSearchProps) {
 
           {results.length === 0 ? (
             <p className="py-8 text-center text-xs text-zinc-500">
-              No matching books or stationery found for “{query}”.
+              No matching books, IGNOU materials, or stationery found for “{query}”.
             </p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -99,10 +106,25 @@ export default function GlobalSearch({ onSelectProduct }: GlobalSearchProps) {
                       title={item.title}
                       author={item.specs.author}
                       category={item.category}
-                      pedestal={false}
+                      courseCode={item.ignouCourseCode}
+                      programCode={item.ignouProgramCode}
+                      year={item.ignouYear}
+                      releaseDate={item.specs.releaseDate}
                     />
                   </div>
                   <div className="min-w-0 flex-1">
+                    {item.category === 'IGNOU' && (
+                      <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-zinc-400 truncate mb-0.5">
+                        {[
+                          item.ignouProgramCode || item.ignouDegree,
+                          item.ignouYear,
+                          item.ignouCourseCode,
+                          item.ignouMaterialType,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    )}
                     <p className="text-xs font-bold text-[#111111] dark:text-[#F5F5F7] truncate">
                       {item.title}
                     </p>

@@ -16,12 +16,19 @@ import {
   CartItem,
   CatalogItem,
   getEffectivePrice,
+  getPhysicalFormatLabel,
   useCatalog,
 } from '../context/CatalogContext';
 import { useTheme } from '../context/ThemeContext';
 import ProductImage6x9 from './ProductImage6x9';
 import ThemeToggle from './ThemeToggle';
 import { useToast } from '../context/ToastContext';
+import {
+  downloadOrderReceiptPdf,
+  OrderedItemSnapshot,
+  triggerEbookPdfDownload,
+  UserOrderRecord,
+} from '../utils/ebookDownload';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -42,7 +49,10 @@ export default function CheckoutModal({
     removeFromCart,
     clearCart,
     cartTotal,
+    addUserOrder,
+    setIsOrdersOpen,
   } = useCatalog();
+  const { theme } = useTheme();
   const { showToast } = useToast();
 
   const [step, setStep] = useState<'bag' | 'checkout' | 'processing' | 'success'>('bag');
@@ -85,7 +95,7 @@ export default function CheckoutModal({
   const formatItemTitle = (entry?: CartItem) => {
     if (!entry || !entry.product) return 'LEKHIX Edition';
     return entry.selectedFormat === 'ebook'
-      ? `${entry.product.title} (eBook PDF)`
+      ? `${entry.product.title} (PDF)`
       : entry.product.title;
   };
 
@@ -126,6 +136,45 @@ export default function CheckoutModal({
       .filter((i) => i.selectedFormat === 'ebook' && i.product)
       .map((i) => i.product);
 
+    const itemSnapshots: OrderedItemSnapshot[] = activeItems.map((entry) => ({
+      productId: entry.product.id,
+      title: entry.product.title,
+      category: entry.product.category,
+      image: entry.product.image,
+      price: getEffectivePrice(entry.product, entry.selectedFormat),
+      quantity: entry.quantity,
+      selectedFormat: entry.selectedFormat,
+      author: entry.product.specs?.author,
+      publisher: entry.product.specs?.publisher,
+      isbn: entry.product.specs?.isbn,
+      formatSpec: entry.product.specs?.format,
+      description: entry.product.description,
+      ebookPdfUrl: entry.product.ebookPdfUrl,
+      ebookFileName: entry.product.ebookFileName,
+      synopsisPdfUrl: entry.product.synopsisPdfUrl,
+      synopsisFileName: entry.product.synopsisFileName,
+      ignouMaterialType: entry.product.ignouMaterialType,
+    }));
+
+    const resolvedAddress = (
+      formData.address.trim() ||
+      (isDigitalOnlyOrder ? 'Digital eBook (Instant PDF Delivery)' : '')
+    ).slice(0, 500);
+
+    const newUserOrder: UserOrderRecord = {
+      orderId: newOrderId,
+      paymentId: paymentId.slice(0, 100),
+      customerName: formData.name.trim().slice(0, 150),
+      customerPhone: formData.phone.trim().slice(0, 50),
+      customerAddress: resolvedAddress,
+      itemName: summaryTitle.slice(0, 500),
+      itemType: summaryCategory.slice(0, 100),
+      amount: Number(totalAmount),
+      status: 'Success',
+      createdAtIso: new Date().toISOString(),
+      items: itemSnapshots,
+    };
+
     setOrderId(newOrderId);
     setConfirmedAmount(totalAmount);
     setConfirmedTitle(summaryTitle);
@@ -138,10 +187,7 @@ export default function CheckoutModal({
         paymentId: paymentId.slice(0, 100),
         customerName: formData.name.trim().slice(0, 150),
         customerPhone: formData.phone.trim().slice(0, 50),
-        customerAddress: (
-          formData.address.trim() ||
-          (isDigitalOnlyOrder ? 'Digital eBook (Instant PDF Delivery)' : '')
-        ).slice(0, 500),
+        customerAddress: resolvedAddress,
         itemName: summaryTitle.slice(0, 500),
         itemType: summaryCategory.slice(0, 100),
         amount: Number(totalAmount),
@@ -149,17 +195,32 @@ export default function CheckoutModal({
         createdAt: serverTimestamp(),
       });
 
+      // Save to My Orders so user can view & re-download eBooks anytime
+      addUserOrder(newUserOrder);
+
       if (!directItem) {
         clearCart();
       }
       setStep('success');
+
+      // Immediately auto-download purchased eBook PDFs upon confirmation
+      if (purchasedEbooks.length > 0) {
+        for (const ebook of purchasedEbooks) {
+          await triggerEbookPdfDownload(
+            ebook,
+            newOrderId,
+            formData.name.trim()
+          );
+        }
+      }
+
       showToast({
         message:
           purchasedEbooks.length > 0
-            ? `Order ${newOrderId} confirmed! Your eBook PDF is ready to download.`
-            : `Order ${newOrderId} confirmed.`,
+            ? `Order ${newOrderId} confirmed! Downloading your eBook PDF now (also saved in My Orders).`
+            : `Order ${newOrderId} confirmed and saved to My Orders.`,
         type: 'success',
-        duration: 4000,
+        duration: 4500,
       });
     } catch (error) {
       setStep('checkout');
@@ -219,184 +280,28 @@ export default function CheckoutModal({
   };
 
   const handleDownloadEbookPdf = async (ebook: CatalogItem) => {
-    const cleanFileName =
-      ebook.ebookFileName ||
-      `${ebook.title.replace(/[^a-zA-Z0-9]+/g, '_')}_LEKHIX_eBook.pdf`;
-
-    try {
-      const prev = JSON.parse(localStorage.getItem('lekhix_ebook_downloads') || '[]');
-      localStorage.setItem(
-        'lekhix_ebook_downloads',
-        JSON.stringify([
-          {
-            id: ebook.id,
-            title: ebook.title,
-            fileName: cleanFileName,
-            downloadedAt: new Date().toISOString(),
-          },
-          ...prev.slice(0, 19),
-        ])
-      );
-    } catch {
-      // ignore storage quota errors
-    }
-
-    if (ebook.ebookPdfUrl && ebook.ebookPdfUrl.trim()) {
-      const link = document.createElement('a');
-      link.href = ebook.ebookPdfUrl;
-      link.download = cleanFileName;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showToast({
-        message: `Downloading ${cleanFileName}...`,
-        type: 'success',
-        duration: 3000,
-      });
-      return;
-    }
-
-    // Fallback: Generate a complete 6×9 inch archival digital edition PDF
-    const { default: jsPDF } = await import('jspdf');
-    const doc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'in',
-      format: [6, 9],
-    });
-
-    doc.setFillColor(248, 248, 245);
-    doc.rect(0, 0, 6, 9, 'F');
-    doc.setDrawColor(24, 24, 27);
-    doc.setLineWidth(0.02);
-    doc.rect(0.45, 0.45, 5.1, 8.1);
-
-    doc.setFontSize(9);
-    doc.setTextColor(100, 100, 100);
-    doc.text('LEKHIX DIGITAL ARCHIVE · 6 × 9 IN EDITION', 3, 1.3, {
-      align: 'center',
-    });
-
-    doc.setFontSize(20);
-    doc.setTextColor(17, 17, 17);
-    const titleLines = doc.splitTextToSize(ebook.title.toUpperCase(), 4.2);
-    doc.text(titleLines, 3, 2.8, { align: 'center' });
-
-    doc.setFontSize(11);
-    doc.setTextColor(60, 60, 60);
-    doc.text(`by ${ebook.specs?.author || 'LEKHIX Editions'}`, 3, 4.1, {
-      align: 'center',
-    });
-
-    doc.setFontSize(9.5);
-    doc.setTextColor(80, 80, 80);
-    const descLines = doc.splitTextToSize(ebook.description || '', 4.1);
-    doc.text(descLines, 3, 5.1, { align: 'center' });
-
-    doc.setFontSize(8);
-    doc.setTextColor(120, 120, 120);
-    doc.text(
-      `${ebook.specs?.publisher || 'LEKHIX Press'} · ISBN ${
-        ebook.specs?.isbn || ''
-      } · Order ${orderId}`,
-      3,
-      8.1,
-      { align: 'center' }
+    const fileName = await triggerEbookPdfDownload(
+      ebook,
+      orderId,
+      formData.name
     );
-
-    const pages =
-      ebook.previewPages && ebook.previewPages.length > 0
-        ? ebook.previewPages
-        : [
-            {
-              pageNumber: 1,
-              heading: 'Chapter I · Editorial Note & Synopsis',
-              body: ebook.description || '',
-            },
-          ];
-
-    pages.forEach((p) => {
-      doc.addPage([6, 9], 'portrait');
-      doc.setFillColor(252, 252, 250);
-      doc.rect(0, 0, 6, 9, 'F');
-
-      doc.setFontSize(8);
-      doc.setTextColor(130, 130, 130);
-      doc.text(ebook.title.toUpperCase(), 0.65, 0.75);
-      doc.text(`PAGE ${p.pageNumber}`, 5.35, 0.75, { align: 'right' });
-
-      doc.setDrawColor(220, 220, 215);
-      doc.setLineWidth(0.01);
-      doc.line(0.65, 0.9, 5.35, 0.9);
-
-      doc.setFontSize(13);
-      doc.setTextColor(17, 17, 17);
-      const headingLines = doc.splitTextToSize(p.heading, 4.7);
-      doc.text(headingLines, 0.65, 1.5);
-
-      doc.setFontSize(10.5);
-      doc.setTextColor(45, 45, 45);
-      const bodyLines = doc.splitTextToSize(p.body, 4.7);
-      doc.text(bodyLines, 0.65, 2.25);
-
-      doc.setFontSize(8);
-      doc.setTextColor(150, 150, 150);
-      doc.text(`Licensed to ${formData.name || 'Reader'} · LEKHIX Editions`, 3, 8.4, {
-        align: 'center',
-      });
-    });
-
-    doc.save(cleanFileName);
     showToast({
-      message: `Downloaded ${cleanFileName}`,
+      message: `Downloading ${fileName}...`,
       type: 'success',
       duration: 3000,
     });
   };
 
   const downloadReceiptPDF = async () => {
-    const { default: jsPDF } = await import('jspdf');
-    const doc = new jsPDF();
-
-    doc.setFontSize(20);
-    doc.setTextColor(17, 17, 17);
-    doc.text('LEKHIX', 105, 24, { align: 'center' });
-
-    doc.setFontSize(10);
-    doc.setTextColor(110, 110, 110);
-    doc.text('BOOKS & ARCHITECTURAL STATIONERY · OFFICIAL RECEIPT', 105, 32, {
-      align: 'center',
+    await downloadOrderReceiptPdf({
+      orderId,
+      customerName: formData.name,
+      customerPhone: formData.phone,
+      customerAddress: formData.address,
+      itemName: confirmedTitle,
+      amount: confirmedAmount,
     });
-
-    doc.setDrawColor(210, 210, 205);
-    doc.line(20, 40, 190, 40);
-
-    doc.setFontSize(11);
-    doc.setTextColor(20, 20, 20);
-    doc.text(`Order Reference: ${orderId}`, 20, 54);
-    doc.text(`Date: ${new Date().toLocaleDateString('en-IN')}`, 20, 62);
-    doc.text(`Customer: ${formData.name}`, 20, 70);
-    doc.text(`Phone: ${formData.phone}`, 20, 78);
-    if (formData.address) {
-      doc.text(`Address: ${formData.address}`, 20, 86);
-    }
-
-    doc.line(20, 95, 190, 95);
-    doc.setFontSize(12);
-    doc.text(`Edition / Item: ${confirmedTitle}`, 20, 108);
-    doc.setFontSize(14);
-    doc.text(`Total Paid: Rs. ${confirmedAmount.toLocaleString('en-IN')}`, 20, 122);
-
-    doc.line(20, 134, 190, 134);
-    doc.setFontSize(9);
-    doc.setTextColor(130, 130, 130);
-    doc.text('Thank you for collecting from LEKHIX.', 105, 148, { align: 'center' });
-
-    doc.save(`LEKHIX_Receipt_${orderId}.pdf`);
   };
-
-  const { theme } = useTheme();
 
   const fullScreenView = (
     <div className="fixed inset-0 z-[250] w-screen h-screen overflow-y-auto overflow-x-hidden bg-[#FAFAFA] dark:bg-[#0A0A0C] text-[#111111] dark:text-[#F5F5F7] flex flex-col justify-between">
@@ -454,7 +359,7 @@ export default function CheckoutModal({
                   Your Shopping Bag is Empty
                 </p>
                 <p className="text-xs sm:text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-md mx-auto">
-                  Explore our 6×9 hardcover monographs, instant downloadable PDF eBooks, and precision architectural stationery.
+                  Explore our books, IGNOU study materials, instant downloadable PDF eBooks, and architectural stationery.
                 </p>
                 <div className="pt-2">
                   <button
@@ -485,6 +390,10 @@ export default function CheckoutModal({
                               title={product.title}
                               author={product.specs?.author}
                               category={product.category}
+                              courseCode={product.ignouCourseCode}
+                              programCode={product.ignouProgramCode}
+                              year={product.ignouYear}
+                              releaseDate={product.specs?.releaseDate}
                             />
                           </div>
                         </div>
@@ -494,8 +403,12 @@ export default function CheckoutModal({
                             <div className="min-w-0">
                               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400 mb-1">
                                 {selectedFormat === 'ebook'
-                                  ? 'EBOOK EDITION · INSTANT PDF DOWNLOAD'
-                                  : `PHYSICAL EDITION · ${product.specs?.format || '6 × 9 IN'}`}
+                                  ? product.category === 'IGNOU'
+                                    ? 'IGNOU · PDF'
+                                    : 'EBOOK PDF'
+                                  : product.category === 'IGNOU'
+                                  ? `IGNOU · ${getPhysicalFormatLabel(product)}`
+                                  : 'PHYSICAL EDITION'}
                               </p>
                               <h3 className="font-editorial text-xl sm:text-2xl font-semibold text-[#111111] dark:text-white truncate">
                                 {product.title}
@@ -637,59 +550,51 @@ export default function CheckoutModal({
               className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start"
             >
               {/* Left 7 Columns: Customer Information */}
-              <div className="lg:col-span-7 p-6 sm:p-8 bg-[#FFFFFF] dark:bg-[#121216] border border-[#E5E5E0] dark:border-[#242429] space-y-5">
+              <div className="lg:col-span-7 p-6 sm:p-8 bg-[#FFFFFF] dark:bg-[#121216] border border-[#E5E5E0] dark:border-[#242429] space-y-4">
                 <h2 className="text-xs font-bold uppercase tracking-[0.2em] pb-3 border-b border-[#ECECE7] dark:border-[#222227]">
                   READER &amp; DELIVERY INFORMATION
                 </h2>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500 mb-2">
-                    FULL NAME
-                  </label>
                   <input
                     type="text"
                     required
                     maxLength={150}
+                    aria-label="Full Name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Enter your full name"
-                    className="w-full px-4 py-3 text-xs bg-[#FAFAFA] dark:bg-[#17171D] border border-[#D4D4D0] dark:border-[#2E2E36] focus:border-[#111111] dark:focus:border-white outline-none"
+                    placeholder="FULL NAME"
+                    className="w-full px-4 py-3 text-xs text-[#111111] dark:text-[#F5F5F7] bg-[#FAFAFA] dark:bg-[#17171D] border border-[#D4D4D0] dark:border-[#2E2E36] focus:border-[#111111] dark:focus:border-white outline-none transition-colors placeholder:text-[10px] placeholder:font-semibold placeholder:uppercase placeholder:tracking-[0.16em] placeholder:text-zinc-400/75 dark:placeholder:text-zinc-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500 mb-2">
-                    PHONE NUMBER
-                  </label>
                   <input
                     type="tel"
                     required
                     maxLength={50}
+                    aria-label="Phone Number"
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="10-digit mobile number"
-                    className="w-full px-4 py-3 text-xs bg-[#FAFAFA] dark:bg-[#17171D] border border-[#D4D4D0] dark:border-[#2E2E36] focus:border-[#111111] dark:focus:border-white outline-none tabular-nums"
+                    placeholder="PHONE NUMBER (10-DIGIT MOBILE)"
+                    className="w-full px-4 py-3 text-xs text-[#111111] dark:text-[#F5F5F7] bg-[#FAFAFA] dark:bg-[#17171D] border border-[#D4D4D0] dark:border-[#2E2E36] focus:border-[#111111] dark:focus:border-white outline-none transition-colors tabular-nums placeholder:text-[10px] placeholder:font-semibold placeholder:uppercase placeholder:tracking-[0.16em] placeholder:text-zinc-400/75 dark:placeholder:text-zinc-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500 mb-2">
-                    {isDigitalOnlyOrder
-                      ? 'DELIVERY ADDRESS / NOTES (OPTIONAL FOR EBOOK PDF)'
-                      : 'DELIVERY ADDRESS'}
-                  </label>
                   <textarea
                     rows={3}
                     required={!isDigitalOnlyOrder}
                     maxLength={500}
+                    aria-label="Delivery Address"
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                     placeholder={
                       isDigitalOnlyOrder
-                        ? 'Optional notes or email (your PDF unlocks immediately on the next screen)'
-                        : 'Street address, city, state, and PIN code'
+                        ? 'DELIVERY ADDRESS OR EMAIL (OPTIONAL FOR PDF)'
+                        : 'DELIVERY ADDRESS (STREET, CITY, STATE & PIN CODE)'
                     }
-                    className="w-full px-4 py-3 text-xs bg-[#FAFAFA] dark:bg-[#17171D] border border-[#D4D4D0] dark:border-[#2E2E36] focus:border-[#111111] dark:focus:border-white outline-none resize-none"
+                    className="w-full px-4 py-3 text-xs text-[#111111] dark:text-[#F5F5F7] bg-[#FAFAFA] dark:bg-[#17171D] border border-[#D4D4D0] dark:border-[#2E2E36] focus:border-[#111111] dark:focus:border-white outline-none transition-colors resize-none placeholder:text-[10px] placeholder:font-semibold placeholder:uppercase placeholder:tracking-[0.16em] placeholder:text-zinc-400/75 dark:placeholder:text-zinc-500"
                   />
                 </div>
               </div>
@@ -721,8 +626,8 @@ export default function CheckoutModal({
                           </p>
                           <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
                             {entry.selectedFormat === 'ebook'
-                              ? 'eBook (PDF) · Instant Download'
-                              : `Physical · 6 × 9 in`}{' '}
+                              ? 'PDF · Instant Download'
+                              : getPhysicalFormatLabel(entry.product)}{' '}
                             × {entry.quantity}
                           </p>
                         </div>
@@ -799,7 +704,7 @@ export default function CheckoutModal({
               {confirmedEbooks.length > 0 && (
                 <div className="p-5 bg-[#F2F2EE] dark:bg-[#18181E] border border-[#111111]/20 dark:border-white/20 space-y-3">
                   <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#111111] dark:text-white">
-                    YOUR EBOOK (PDF) IS READY FOR DOWNLOAD
+                    EBOOK (PDF) DOWNLOADED · AVAILABLE ANYTIME IN MY ORDERS
                   </p>
                   {confirmedEbooks.map((ebook) => (
                     <button
@@ -810,25 +715,35 @@ export default function CheckoutModal({
                     >
                       <Download className="w-4 h-4 shrink-0" />
                       <span className="truncate">
-                        DOWNLOAD PDF · {ebook.title}
+                        RE-DOWNLOAD PDF · {ebook.title}
                       </span>
                     </button>
                   ))}
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                 <button
                   type="button"
                   onClick={downloadReceiptPDF}
-                  className="w-full py-3.5 border border-[#111111] dark:border-white text-xs font-bold uppercase tracking-[0.18em] flex items-center justify-center gap-2 hover:bg-[#111111] hover:text-white dark:hover:bg-white dark:hover:text-[#111111] transition-colors cursor-pointer"
+                  className="w-full py-3.5 border border-[#111111] dark:border-white text-xs font-bold uppercase tracking-[0.16em] flex items-center justify-center gap-2 hover:bg-[#111111] hover:text-white dark:hover:bg-white dark:hover:text-[#111111] transition-colors cursor-pointer whitespace-nowrap"
                 >
-                  <FileDown className="w-4 h-4" /> Official Receipt
+                  <FileDown className="w-4 h-4" /> Receipt
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    setIsOrdersOpen(true);
+                  }}
+                  className="w-full py-3.5 border border-[#111111] dark:border-white text-xs font-bold uppercase tracking-[0.16em] hover:bg-[#111111] hover:text-white dark:hover:bg-white dark:hover:text-[#111111] transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  My Orders
                 </button>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="w-full py-3.5 bg-[#111111] dark:bg-white text-white dark:text-[#111111] text-xs font-bold uppercase tracking-[0.18em] hover:opacity-85 transition-opacity cursor-pointer"
+                  className="w-full py-3.5 bg-[#111111] dark:bg-white text-white dark:text-[#111111] text-xs font-bold uppercase tracking-[0.16em] hover:opacity-85 transition-opacity cursor-pointer whitespace-nowrap"
                 >
                   Return to Store
                 </button>

@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, LogOut } from 'lucide-react';
 import CatalogManager from '../components/admin/CatalogManager';
 import OrdersView from '../components/admin/OrdersView';
+import DatabaseManager from '../components/admin/DatabaseManager';
 import ContactSubmissions from '../components/admin/ContactSubmissions';
 import ThemeToggle from '../components/ThemeToggle';
 import LekhixLogo from '../components/LekhixLogo';
@@ -21,7 +22,9 @@ export default function AdminDashboard() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
-  const [activeTab, setActiveTab] = useState<'catalog' | 'orders' | 'inquiries'>('catalog');
+  const [activeTab, setActiveTab] = useState<
+    'catalog' | 'orders' | 'database' | 'inquiries'
+  >('catalog');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -146,10 +149,10 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden bg-[#FAFAFA] dark:bg-[#0A0A0C] text-[#111111] dark:text-[#F5F5F7]">
-      {/* Top Bar */}
+      {/* Top Bar — Logo hidden on mobile so Catalog / Orders / Database / Inquiries fit cleanly */}
       <header className="sticky top-0 z-[100] pt-[env(safe-area-inset-top)] border-b border-[#E5E5E0] dark:border-[#222227] bg-[#FAFAFA] dark:bg-[#0A0A0C]">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-12 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-6">
-          <div className="flex items-center gap-3 sm:gap-6 shrink-0">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-12 h-14 sm:h-20 flex items-center justify-between gap-2 sm:gap-6">
+          <div className="hidden sm:flex items-center gap-6 shrink-0">
             <Link to="/" className="shrink-0">
               <LekhixLogo size="sm" />
             </Link>
@@ -158,7 +161,15 @@ export default function AdminDashboard() {
             </span>
           </div>
 
-          <nav className="flex items-center gap-3 sm:gap-6 text-[11px] sm:text-xs font-bold uppercase tracking-[0.14em] sm:tracking-[0.18em] overflow-x-auto hide-scrollbar">
+          <nav className="flex items-center gap-4 sm:gap-6 text-[11px] sm:text-xs font-bold uppercase tracking-[0.14em] sm:tracking-[0.18em] overflow-x-auto hide-scrollbar">
+            <Link
+              to="/"
+              className="sm:hidden p-1 -ml-1 text-zinc-500 hover:text-[#111111] dark:hover:text-white transition-colors shrink-0"
+              title="Back to Storefront"
+              aria-label="Back to Storefront"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
             <button
               onClick={() => setActiveTab('catalog')}
               className={`py-2 border-b-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
@@ -178,6 +189,16 @@ export default function AdminDashboard() {
               }`}
             >
               Orders
+            </button>
+            <button
+              onClick={() => setActiveTab('database')}
+              className={`py-2 border-b-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                activeTab === 'database'
+                  ? 'border-[#111111] dark:border-white text-[#111111] dark:text-white'
+                  : 'border-transparent text-zinc-400 hover:text-[#111111] dark:hover:text-white'
+              }`}
+            >
+              Database
             </button>
             <button
               onClick={() => setActiveTab('inquiries')}
@@ -211,9 +232,10 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      <main className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-12 py-8 sm:py-10">
+      <main className="max-w-[1440px] mx-auto px-4 sm:px-6 md:px-12 py-5 sm:py-10">
         {activeTab === 'catalog' && <CatalogManager />}
         {activeTab === 'orders' && <OrdersView />}
+        {activeTab === 'database' && <DatabaseManager />}
         {activeTab === 'inquiries' && <ContactSubmissions />}
       </main>
     </div>

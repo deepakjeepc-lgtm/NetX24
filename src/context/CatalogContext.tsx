@@ -1,9 +1,183 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { db } from '../lib/firebase';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrors';
+import { UserOrderRecord } from '../utils/ebookDownload';
+import {
+  IGNOU_PREPOPULATED_PROGRAM_COURSES,
+  lookupIgnouCourseTitle,
+  normalizeCourseCodeKey,
+} from '../lib/ignouCourseCatalog';
+import {
+  IGNOU_ODL_PG_DIPLOMA_PROGRAMMES,
+  IGNOU_ODL_DIPLOMA_PROGRAMMES,
+  IGNOU_ODL_PG_CERTIFICATE_PROGRAMMES,
+  IGNOU_ODL_CERTIFICATE_PROGRAMMES_FULL as IGNOU_ODL_CERTIFICATE_PROGRAMMES,
+  IGNOU_ODL_AWARENESS_PROGRAMMES,
+} from '../lib/ignouPart2Catalog';
+
+export {
+  IGNOU_ODL_PG_DIPLOMA_PROGRAMMES,
+  IGNOU_ODL_DIPLOMA_PROGRAMMES,
+  IGNOU_ODL_PG_CERTIFICATE_PROGRAMMES,
+  IGNOU_ODL_CERTIFICATE_PROGRAMMES,
+  IGNOU_ODL_AWARENESS_PROGRAMMES,
+};
 
 export type BookFormat = 'ebook' | 'physical' | 'both';
+export type IgnouDegree =
+  | 'Bachelor Degree'
+  | 'Master Degree'
+  | 'Post Graduate Diploma'
+  | 'Diploma'
+  | 'Post Graduate Certificate'
+  | 'Certificate Degree'
+  | 'Awareness / Appreciation';
+export type IgnouYear = '1st Year' | '2nd Year' | '3rd Year' | '4th Year';
+export type IgnouMaterialType = 'Assignment' | 'Project';
+
+export const IGNOU_DEGREE_OPTIONS: IgnouDegree[] = [
+  'Bachelor Degree',
+  'Master Degree',
+  'Post Graduate Diploma',
+  'Diploma',
+  'Post Graduate Certificate',
+  'Certificate Degree',
+  'Awareness / Appreciation',
+];
+
+export const IGNOU_YEAR_OPTIONS: IgnouYear[] = [
+  '1st Year',
+  '2nd Year',
+  '3rd Year',
+  '4th Year',
+];
+
+export interface IgnouCourseEntry {
+  code: string;
+  title: string;
+  year: IgnouYear;
+}
+
+export interface IgnouProgrammeEntry {
+  code: string;
+  title: string;
+  degree: IgnouDegree;
+}
+
+export interface IgnouDatabaseProgram {
+  code: string;
+  title: string;
+  degree: IgnouDegree;
+  courses: IgnouCourseEntry[];
+}
+
+/** Complete list of all 62 ODL Bachelor Degree Programmes from the official IGNOU PDF */
+export const IGNOU_ODL_BACHELOR_PROGRAMMES: IgnouProgrammeEntry[] = [
+  { code: 'BAAHD', title: 'Bachelor of Arts (Applied Hindi)', degree: 'Bachelor Degree' },
+  { code: 'BAASK', title: 'Bachelor of Arts (Applied Sanskrit)', degree: 'Bachelor Degree' },
+  { code: 'BAAUD', title: 'Bachelor of Arts (Applied Urdu)', degree: 'Bachelor Degree' },
+  { code: 'BAECH', title: 'Bachelor of Arts (Honours) Economics', degree: 'Bachelor Degree' },
+  { code: 'BAEGH', title: 'Bachelor of Arts (Honours) English', degree: 'Bachelor Degree' },
+  { code: 'BAFEC', title: 'Bachelor of Arts (Economics)', degree: 'Bachelor Degree' },
+  { code: 'BAFEDU', title: 'Bachelor of Arts (Education)', degree: 'Bachelor Degree' },
+  { code: 'BAFEG', title: 'Bachelor of Arts (English)', degree: 'Bachelor Degree' },
+  { code: 'BAFFSM', title: 'Bachelor of Arts (Facility and Services Management)', degree: 'Bachelor Degree' },
+  { code: 'BAFHD', title: 'Bachelor of Arts (Hindi)', degree: 'Bachelor Degree' },
+  { code: 'BAFHI', title: 'Bachelor of Arts (History)', degree: 'Bachelor Degree' },
+  { code: 'BAFHSC', title: 'Bachelor of Arts (Home Science)', degree: 'Bachelor Degree' },
+  { code: 'BAFJDM', title: 'Bachelor of Arts (Journalism and Digital Media)', degree: 'Bachelor Degree' },
+  { code: 'BAFPA', title: 'Bachelor of Arts (Public Administration)', degree: 'Bachelor Degree' },
+  { code: 'BAFPS', title: 'Bachelor of Arts (Political Science)', degree: 'Bachelor Degree' },
+  { code: 'BAFPY', title: 'Bachelor of Arts (Philosophy)', degree: 'Bachelor Degree' },
+  { code: 'BAFSK', title: 'Bachelor of Arts (Sanskrit)', degree: 'Bachelor Degree' },
+  { code: 'BAFSM', title: 'Bachelor of Arts (Facility and Services Management)', degree: 'Bachelor Degree' },
+  { code: 'BAFSO', title: 'Bachelor of Arts (Sociology)', degree: 'Bachelor Degree' },
+  { code: 'BAFUD', title: 'Bachelor of Arts (Urdu)', degree: 'Bachelor Degree' },
+  { code: 'BAFVTM', title: 'Bachelor of Arts (Vocational Studies) Tourism Management', degree: 'Bachelor Degree' },
+  { code: 'BAGS', title: 'Bachelor of Arts (Gender Studies)', degree: 'Bachelor Degree' },
+  { code: 'BAHDH', title: 'Bachelor of Arts (Honours) Hindi', degree: 'Bachelor Degree' },
+  { code: 'BAHIH', title: 'Bachelor of Arts (Honours) History', degree: 'Bachelor Degree' },
+  { code: 'BAM', title: 'Bachelor of Arts', degree: 'Bachelor Degree' },
+  { code: 'BAMSME', title: 'Bachelor of Arts (Micro, Small & Medium Enterprises)', degree: 'Bachelor Degree' },
+  { code: 'BAPAH', title: 'Bachelor of Arts (Honours) Public Administration', degree: 'Bachelor Degree' },
+  { code: 'BAPFHMH', title: 'Bachelor of Arts (Performing Arts) Hindustani Music Honours', degree: 'Bachelor Degree' },
+  { code: 'BAPSH', title: 'Bachelor of Arts (Hons) Political Science', degree: 'Bachelor Degree' },
+  { code: 'BASKH', title: 'B.A. Honours Sanskrit (संस्कृत ऑनर्स)', degree: 'Bachelor Degree' },
+  { code: 'BASOH', title: 'Bachelor of Arts (Hons) Sociology', degree: 'Bachelor Degree' },
+  { code: 'BAUDH', title: 'B.A. Honours Urdu (उर्दू ऑनर्स)', degree: 'Bachelor Degree' },
+  { code: 'BBA', title: 'Bachelor of Business Administration', degree: 'Bachelor Degree' },
+  { code: 'BBARIL', title: 'Bachelor of Business Administration (Retailing)', degree: 'Bachelor Degree' },
+  { code: 'BBASM', title: 'Bachelor of Business Administration (Services Management)', degree: 'Bachelor Degree' },
+  { code: 'BCA_NEW', title: 'Bachelor of Computer Applications', degree: 'Bachelor Degree' },
+  { code: 'BCOMF', title: 'Bachelor of Commerce', degree: 'Bachelor Degree' },
+  { code: 'BED', title: 'Bachelor of Education', degree: 'Bachelor Degree' },
+  { code: 'BFSW', title: 'Bachelor of Social Work', degree: 'Bachelor Degree' },
+  { code: 'BFTTM', title: 'Bachelor of Tourism & Travel Management', degree: 'Bachelor Degree' },
+  { code: 'BHM', title: 'Bachelor of Science (Hospitality & Hotel Administration)', degree: 'Bachelor Degree' },
+  { code: 'BLIS', title: 'Bachelor of Library and Information Science', degree: 'Bachelor Degree' },
+  { code: 'BPAFHM', title: 'Bachelor of Performing Arts (Hindustani Music)', degree: 'Bachelor Degree' },
+  { code: 'BSCAEY', title: 'Bachelor of Science (Applied Science-Energy)', degree: 'Bachelor Degree' },
+  { code: 'BSCANH', title: 'Bachelor of Science (Honours) Anthropology', degree: 'Bachelor Degree' },
+  { code: 'BSCBCH', title: 'Bachelor of Science (Hons) Biochemistry', degree: 'Bachelor Degree' },
+  { code: 'BSCFAN', title: 'Bachelor of Science (Anthropology)', degree: 'Bachelor Degree' },
+  { code: 'BSCFBC', title: 'Bachelor of Science (Biochemistry)', degree: 'Bachelor Degree' },
+  { code: 'BSCFFSQM', title: 'Bachelor of Science (Food Safety and Quality Management)', degree: 'Bachelor Degree' },
+  { code: 'BSCFMT', title: 'Bachelor of Science (Mathematics)', degree: 'Bachelor Degree' },
+  { code: 'BSCG', title: 'Bachelor of Science', degree: 'Bachelor Degree' },
+  { code: 'BSCM', title: 'Bachelor of Science', degree: 'Bachelor Degree' },
+  { code: 'BSCN', title: 'Bachelor of Science (Nursing (Post Basic))', degree: 'Bachelor Degree' },
+  { code: 'BAAPS', title: 'Bachelor of Arts (Applied Skills)', degree: 'Bachelor Degree' },
+  { code: 'BAMSAPS', title: 'Bachelor of Arts (Applied Skills-MSME)', degree: 'Bachelor Degree' },
+  { code: 'BCOMAPS', title: 'Bachelor of Commerce (Applied Skills)', degree: 'Bachelor Degree' },
+  { code: 'BSCAPS', title: 'Bachelor of Science (Applied Skills)', degree: 'Bachelor Degree' },
+  { code: 'BTMAPS', title: 'Bachelor of Arts (Applied Skills-Tourism Management)', degree: 'Bachelor Degree' },
+  { code: 'BABED', title: 'BA-BED Secondary Stage', degree: 'Bachelor Degree' },
+  { code: 'BCOMBED', title: 'BCOM-BED Secondary Stage', degree: 'Bachelor Degree' },
+  { code: 'BSCBED', title: 'BSC-BED Secondary Stage', degree: 'Bachelor Degree' },
+  { code: 'BSCFFAD', title: 'Bachelor of Science (Fabric and Apparel Design)', degree: 'Bachelor Degree' },
+];
+
+/** Official IGNOU Master Degree Programmes */
+export const IGNOU_ODL_MASTER_PROGRAMMES: IgnouProgrammeEntry[] = [
+  { code: 'MEG', title: 'Master of Arts (English)', degree: 'Master Degree' },
+  { code: 'MHD', title: 'Master of Arts (Hindi)', degree: 'Master Degree' },
+  { code: 'MPS', title: 'Master of Arts (Political Science)', degree: 'Master Degree' },
+  { code: 'MAH', title: 'Master of Arts (History)', degree: 'Master Degree' },
+  { code: 'MSO', title: 'Master of Arts (Sociology)', degree: 'Master Degree' },
+  { code: 'MEC', title: 'Master of Arts (Economics)', degree: 'Master Degree' },
+  { code: 'MPA', title: 'Master of Arts (Public Administration)', degree: 'Master Degree' },
+  { code: 'MAPC', title: 'Master of Arts (Psychology)', degree: 'Master Degree' },
+  { code: 'MAPY', title: 'Master of Arts (Philosophy)', degree: 'Master Degree' },
+  { code: 'MARD', title: 'Master of Arts (Rural Development)', degree: 'Master Degree' },
+  { code: 'MAEDU', title: 'Master of Arts (Education)', degree: 'Master Degree' },
+  { code: 'MCOM', title: 'Master of Commerce', degree: 'Master Degree' },
+  { code: 'MBA', title: 'Master of Business Administration', degree: 'Master Degree' },
+  { code: 'MCA_NEW', title: 'Master of Computer Applications', degree: 'Master Degree' },
+  { code: 'MLIS', title: 'Master of Library and Information Science', degree: 'Master Degree' },
+  { code: 'MSW', title: 'Master of Social Work', degree: 'Master Degree' },
+  { code: 'MTTM', title: 'Master of Tourism and Travel Management', degree: 'Master Degree' },
+  { code: 'MAAN', title: 'Master of Arts (Anthropology)', degree: 'Master Degree' },
+  { code: 'MAGD', title: 'Master of Arts (Gender and Development Studies)', degree: 'Master Degree' },
+  { code: 'MAJMC', title: 'Master of Arts (Journalism and Mass Communication)', degree: 'Master Degree' },
+  { code: 'MSK', title: 'Master of Arts (Sanskrit)', degree: 'Master Degree' },
+  { code: 'MAUD', title: 'Master of Arts (Urdu)', degree: 'Master Degree' },
+  { code: 'MSCDFSM', title: 'Master of Science (Dietetics and Food Service Management)', degree: 'Master Degree' },
+  { code: 'MSCENV', title: 'Master of Science (Environmental Science)', degree: 'Master Degree' },
+  { code: 'MSCMACS', title: 'Master of Science (Mathematics with Applications in Computer Science)', degree: 'Master Degree' },
+];
+
+export const IGNOU_ALL_PROGRAMMES: IgnouProgrammeEntry[] = [
+  ...IGNOU_ODL_BACHELOR_PROGRAMMES,
+  ...IGNOU_ODL_MASTER_PROGRAMMES,
+  ...IGNOU_ODL_PG_DIPLOMA_PROGRAMMES,
+  ...IGNOU_ODL_DIPLOMA_PROGRAMMES,
+  ...IGNOU_ODL_PG_CERTIFICATE_PROGRAMMES,
+  ...IGNOU_ODL_CERTIFICATE_PROGRAMMES,
+  ...IGNOU_ODL_AWARENESS_PROGRAMMES,
+];
+
+export const DEFAULT_CATEGORIES = ['Books', 'Stationery', 'IGNOU'] as const;
 
 export interface ProductSpecs {
   author: string;
@@ -26,22 +200,41 @@ export interface PreviewPage {
 export interface CatalogItem {
   id: string;
   title: string;
-  category: 'Books' | 'Stationery';
+  category: string;
   price: number;
   originalPrice?: number;
   image: string;
   featured: boolean;
+  soldOut?: boolean;
   description: string;
   specs: ProductSpecs;
   previewPages?: PreviewPage[];
-  /** For Books: 'ebook' (default PDF only), 'physical' (6x9 hardcover only), or 'both' */
+  /** For Books, IGNOU & Custom Categories: 'ebook' (default PDF only), 'physical' (6x9 hardcover only), or 'both' */
   bookFormat?: BookFormat;
   /** Price in INR for the eBook (PDF) edition when bookFormat is 'ebook' or 'both' */
   ebookPrice?: number;
-  /** Uploaded PDF file path/data URL or external PDF download link */
+  /** Uploaded PDF file path/data URL or external PDF download link (Main Book / Assignment / Project PDF) */
   ebookPdfUrl?: string;
   /** Original PDF filename for display and download */
   ebookFileName?: string;
+  /** Optional free Demo / Sample PDF file URL for users to preview/download before purchase */
+  demoPdfUrl?: string;
+  /** Original Demo PDF filename */
+  demoFileName?: string;
+  /** For IGNOU Project / Synopsis: second paid document (Synopsis PDF) */
+  synopsisPdfUrl?: string;
+  synopsisFileName?: string;
+  /** For IGNOU Project / Synopsis: free Demo PDF for Synopsis */
+  synopsisDemoPdfUrl?: string;
+  synopsisDemoFileName?: string;
+  /** IGNOU specific hierarchy metadata when category === 'IGNOU' */
+  ignouDegree?: IgnouDegree;
+  ignouYear?: IgnouYear;
+  ignouProgramCode?: string;
+  ignouProgramName?: string;
+  ignouMaterialType?: IgnouMaterialType;
+  ignouCourseCode?: string;
+  ignouCourseTitle?: string;
 }
 
 export interface CartItem {
@@ -50,11 +243,24 @@ export interface CartItem {
   selectedFormat: 'physical' | 'ebook';
 }
 
+export function isBookLikeCategory(category: string): boolean {
+  return category !== 'Stationery';
+}
+
+export function getPhysicalFormatLabel(
+  product: Pick<CatalogItem, 'category' | 'ignouMaterialType'>
+): string {
+  if (product.category === 'IGNOU') {
+    return product.ignouMaterialType === 'Project' ? 'HARDCOPY' : 'HANDWRITTEN';
+  }
+  return 'PHYSICAL';
+}
+
 export function getEffectivePrice(
   product: CatalogItem,
   selectedFormat: 'physical' | 'ebook' = 'physical'
 ): number {
-  if (product.category === 'Books' && selectedFormat === 'ebook') {
+  if (isBookLikeCategory(product.category) && selectedFormat === 'ebook') {
     if (typeof product.ebookPrice === 'number' && product.ebookPrice > 0) {
       return product.ebookPrice;
     }
@@ -66,7 +272,7 @@ export function getEffectivePrice(
 export function getDefaultSelectedFormat(
   product: CatalogItem
 ): 'physical' | 'ebook' {
-  if (product.category === 'Books') {
+  if (isBookLikeCategory(product.category)) {
     const mode = product.bookFormat || 'ebook';
     if (mode === 'ebook') return 'ebook';
     return 'physical';
@@ -74,313 +280,34 @@ export function getDefaultSelectedFormat(
   return 'physical';
 }
 
-export const INITIAL_CATALOG: CatalogItem[] = [
-  {
-    id: 'book-debt-first-5000',
-    title: 'Debt — The First 5,000 Years',
-    category: 'Books',
-    price: 1450,
-    originalPrice: 1800,
-    bookFormat: 'both',
-    ebookPrice: 650,
-    ebookFileName: 'Debt_The_First_5000_Years_LEKHIX_Edition.pdf',
-    image: '/catalog/book-debt.png?v=4',
-    featured: true,
-    description:
-      'Diminutive rooms, grand possibilities. Here anthropologist David Graeber presents a stunning reversal of conventional wisdom: he shows that before there was money, there was debt. For more than 5,000 years, since the beginnings of the first agrarian empires, humans have used elaborate credit systems to buy and sell goods—that is, long before the invention of coins or cash.',
-    specs: {
-      author: 'David Graeber',
-      publisher: 'LEKHIX Editions',
-      releaseDate: 'May 2026',
-      format: '6 × 9 in',
-      features: 'Full color, 256 pages',
-      language: 'English',
-      isbn: '978-3-89955-698-8',
-      reviewerName: 'Christopher Reath',
-      reviewerQuote:
-        'An essential foundational work on human reciprocity, value, and institutional memory—presented in a tactile 6×9 collector edition.',
-    },
-    previewPages: [
-      {
-        pageNumber: 1,
-        heading: 'Chapter I · The Experience of Moral Confusion',
-        body: 'Why is it that an obligation between two people can be transformed, by the simple application of arithmetic, into a cold and indisputable moral imperative? Across five millennia of recorded history, human societies have wrestled with the tension between interpersonal trust and quantified ledger keeping.',
-      },
-      {
-        pageNumber: 14,
-        heading: 'Chapter II · The Myth of Barter',
-        body: 'Every textbook of economics begins with the same imaginary village in which neighbors trade arrowheads for shoes until they invent coinage. Yet anthropological archives reveal something far more sophisticated: credit systems predated bullion by thousands of years in Mesopotamia and the Indus Valley.',
-      },
-      {
-        pageNumber: 42,
-        heading: 'Colophon & 6×9 Edition Note',
-        body: 'Set in Cormorant Garamond and Plus Jakarta Sans. Printed on 120gsm archival acid-free ivory paper and bound in vermilion bookcloth at 6 × 9 inches (15.2 × 22.9 cm).',
-      },
-    ],
-  },
-  {
-    id: 'book-architecture-silence',
-    title: 'The Architecture of Silence',
-    category: 'Books',
-    price: 1850,
-    bookFormat: 'physical',
-    image: '/catalog/book-architecture.png?v=4',
-    featured: true,
-    description:
-      'An intimate architectural monograph exploring minimalist sacred spaces, raw concrete pavilions, and timber sanctuaries across Kyoto, Zurich, and Ahmedabad. Photographed entirely in natural dawn light and bound in tactile obsidian bookcloth.',
-    specs: {
-      author: 'Kenjiro Sato',
-      publisher: 'LEKHIX Press',
-      releaseDate: 'August 2026',
-      format: '6 × 9 in',
-      features: 'Linen hardcover, 312 pages',
-      language: 'English',
-      isbn: '978-3-89955-742-8',
-      reviewerName: 'Alina Lindqvist',
-      reviewerQuote:
-        'Every spread breathes with stillness. The 6×9 vertical proportion frames architectural light and shadow with remarkable intimacy.',
-    },
-    previewPages: [
-      {
-        pageNumber: 1,
-        heading: 'I · Light as Structural Material',
-        body: 'When ornament is pared away to raw board-formed concrete and unvarnished hinoki cypress, daylight ceases to be passive illumination and becomes the primary room-defining element.',
-      },
-      {
-        pageNumber: 28,
-        heading: 'II · Courtyard Proportions',
-        body: 'Measured drawings and dawn photographs of twelve contemplative courtyards, documenting acoustic stillness and seasonal shadow geometry.',
-      },
-    ],
-  },
-  {
-    id: 'book-modern-typography',
-    title: 'Forms of Modern Typography',
-    category: 'Books',
-    price: 720,
-    originalPrice: 950,
-    bookFormat: 'ebook',
-    ebookPrice: 720,
-    ebookFileName: 'Forms_of_Modern_Typography_LEKHIX_eBook.pdf',
-    image: '/catalog/book-typography.png?v=4',
-    featured: true,
-    description:
-      'A definitive study of Swiss grid systems, asymmetric page architecture, and contemporary editorial type foundries. Features archival specimen sheets, essays on negative space, and 6×9 trade book layout mathematics.',
-    specs: {
-      author: 'Emil Ruder & Clara Vance',
-      publisher: 'LEKHIX Editions',
-      releaseDate: 'October 2026',
-      format: '6 × 9 in · PDF Edition',
-      features: 'Digital PDF Edition, 288 pages',
-      language: 'English',
-      isbn: '978-3-89955-819-7',
-      reviewerName: 'Marcus Weber',
-      reviewerQuote:
-        'A masterclass in typographic rhythm, margin geometry, and print production craftsmanship.',
-    },
-    previewPages: [
-      {
-        pageNumber: 1,
-        heading: 'The Function of White Space',
-        body: 'Typography is only legible when the unprinted paper speaks with equal clarity to the printed ink. The 6×9 inch page ratio offers a classic harmonic rectangle for sustained reading.',
-      },
-    ],
-  },
-  {
-    id: 'stat-brass-fountain-pen',
-    title: 'Machined Brass Fountain Pen',
-    category: 'Stationery',
-    price: 2400,
-    image: '/catalog/stat-brass-pen.png?v=4',
-    featured: true,
-    description:
-      'Precision-milled from solid C36000 billet brass with a German iridium fine nib and paired with our 50ml Carbon Archive ink bottle. Engineered for balanced weight and a warm patina that evolves with daily writing.',
-    specs: {
-      author: 'LEKHIX Atelier',
-      publisher: 'LEKHIX Stationery',
-      releaseDate: '2026 Collection',
-      format: '6 × 9 in Presentation Box',
-      features: 'Solid Brass + 50ml Archive Ink',
-      language: 'Fine Nib (0.5mm)',
-      isbn: 'LKX-ST-0041',
-      reviewerName: 'Vikramaditya Sen',
-      reviewerQuote:
-        'Impeccable machining tolerances and effortless ink flow on uncoated cotton paper.',
-    },
-  },
-  {
-    id: 'book-spatial-craft',
-    title: 'Spatial Craft & Material',
-    category: 'Books',
-    price: 1590,
-    bookFormat: 'both',
-    ebookPrice: 690,
-    ebookFileName: 'Spatial_Craft_and_Material_LEKHIX_Edition.pdf',
-    image: '/catalog/book-spatial.png?v=4',
-    featured: false,
-    description:
-      'Examining tactile materiality in contemporary interior architecture—travertine stone, unbleached linen, blackened steel, and hand-thrown ceramics across twenty-four residences.',
-    specs: {
-      author: 'Aarav Mehta',
-      publisher: 'LEKHIX Press',
-      releaseDate: 'July 2026',
-      format: '6 × 9 in',
-      features: 'Uncoated Munken paper, 240 pages',
-      language: 'English',
-      isbn: '978-3-89955-902-6',
-      reviewerName: 'Sora Takahashi',
-      reviewerQuote:
-        'Tactile, restrained, and deeply researched—an indispensable reference for spatial designers.',
-    },
-  },
-  {
-    id: 'stat-linen-monolith-journal',
-    title: 'Linen Monolith 6×9 Journal',
-    category: 'Stationery',
-    price: 890,
-    originalPrice: 1100,
-    image: '/catalog/stat-linen-journal.png?v=4',
-    featured: false,
-    description:
-      'Lay-flat thread-bound 6×9 inch studio notebook wrapped in Japanese charcoal bookcloth. Filled with 192 pages of 120gsm acid-free fountain-pen friendly ivory paper.',
-    specs: {
-      author: 'LEKHIX Atelier',
-      publisher: 'LEKHIX Stationery',
-      releaseDate: '2026 Collection',
-      format: '6 × 9 in',
-      features: '120gsm Ivory Paper, 192 Pages',
-      language: 'Unruled / Dot Grid',
-      isbn: 'LKX-ST-0018',
-    },
-  },
-  {
-    id: 'stat-architect-desk-holder',
-    title: 'Copper Wire Desk Pen Holder',
-    category: 'Stationery',
-    price: 1250,
-    image: '/catalog/stat-desk-holder.png?v=4',
-    featured: false,
-    description:
-      'Hand-brazed geometric copper wire desk vessel paired with cedarwood graphite drafting pencils. Designed to bring architectural order to your reading and writing desk.',
-    specs: {
-      author: 'LEKHIX Atelier',
-      publisher: 'LEKHIX Stationery',
-      releaseDate: '2026 Collection',
-      format: '6 × 9 in Studio Edition',
-      features: 'Brushed Rose Copper & Weighted Base',
-      language: 'Universal',
-      isbn: 'LKX-ST-0029',
-    },
-  },
-  {
-    id: 'stat-black-binder-set',
-    title: 'Matte Black Paper Clip Set',
-    category: 'Stationery',
-    price: 450,
-    originalPrice: 600,
-    image: '/catalog/stat-paper-clip.png?v=4',
-    featured: false,
-    description:
-      'Heavy-gauge tempered spring steel binder clips in matte carbon finish. Ideal for securing manuscripts, looseleaf sketches, and bookmarking 6×9 trade editions.',
-    specs: {
-      author: 'LEKHIX Atelier',
-      publisher: 'LEKHIX Stationery',
-      releaseDate: '2026 Collection',
-      format: '6 × 9 in Studio Pack',
-      features: 'Tempered Black Steel, Set of 4',
-      language: 'Universal',
-      isbn: 'LKX-ST-0064',
-    },
-  },
-  {
-    id: 'book-botanical-index',
-    title: 'The Nocturnal Botanical Index',
-    category: 'Books',
-    price: 1720,
-    bookFormat: 'physical',
-    image: '/catalog/book-botanical.png?v=4',
-    featured: false,
-    description:
-      'An illustrated compendium of rare night-blooming flora, pressed herbarium plates, and botanical essays printed in deep indigo and silver metallic ink on cotton rag paper.',
-    specs: {
-      author: 'Elena Rostova',
-      publisher: 'LEKHIX Editions',
-      releaseDate: 'September 2026',
-      format: '6 × 9 in',
-      features: 'Clothbound Hardcover, 272 pages',
-      language: 'English',
-      isbn: '978-3-89955-954-5',
-    },
-  },
-  {
-    id: 'book-enduring-object',
-    title: 'The Enduring Object',
-    category: 'Books',
-    price: 1680,
-    originalPrice: 1990,
-    bookFormat: 'both',
-    ebookPrice: 740,
-    ebookFileName: 'The_Enduring_Object_LEKHIX_Edition.pdf',
-    image: '/catalog/book-minimal-object.png?v=4',
-    featured: false,
-    description:
-      'A curated archive of twentieth-century industrial design, precision writing instruments, and everyday functional objects designed to last for generations.',
-    specs: {
-      author: 'Dieter & Hans Vogel',
-      publisher: 'LEKHIX Editions',
-      releaseDate: 'November 2026',
-      format: '6 × 9 in',
-      features: 'Hardcover, 264 pages',
-      language: 'English',
-      isbn: '978-3-89955-981-1',
-    },
-  },
-  {
-    id: 'stat-archival-sketchbook',
-    title: 'Archival Cotton Sketchbook',
-    category: 'Stationery',
-    price: 980,
-    image: '/catalog/stat-linen-journal.png?v=4',
-    featured: false,
-    description:
-      'Cold-pressed 180gsm cotton rag sketchbook bound in raw charcoal bookcloth at 6 × 9 inches. Opens 180 degrees flat for architectural drawing and ink wash.',
-    specs: {
-      author: 'LEKHIX Atelier',
-      publisher: 'LEKHIX Stationery',
-      releaseDate: '2026 Collection',
-      format: '6 × 9 in',
-      features: '180gsm Cotton Paper, 128 Pages',
-      language: 'Unruled',
-      isbn: 'LKX-ST-0072',
-    },
-  },
-  {
-    id: 'book-quiet-geometry',
-    title: 'Quiet Geometry in Print',
-    category: 'Books',
-    price: 590,
-    bookFormat: 'ebook',
-    ebookPrice: 590,
-    ebookFileName: 'Quiet_Geometry_in_Print_LEKHIX_eBook.pdf',
-    image: '/catalog/book-spatial.png?v=4',
-    featured: false,
-    description:
-      'Essays and visual studies on proportional systems, bookbinding traditions, and architectural page layouts from Renaissance folios to modern 6×9 trade editions.',
-    specs: {
-      author: 'Nandini Rao',
-      publisher: 'LEKHIX Press',
-      releaseDate: 'October 2026',
-      format: '6 × 9 in · PDF Edition',
-      features: 'Digital PDF, 224 pages',
-      language: 'English',
-      isbn: '978-3-89955-994-1',
-    },
-  },
-];
+/** Zero hardcoded products — only items added by the Admin are shown */
+export const INITIAL_CATALOG: CatalogItem[] = [];
+
+/** Set of legacy demo IDs to strip automatically if previously saved in Firestore or localStorage */
+const LEGACY_DEMO_IDS = new Set([
+  'book-debt-first-5000',
+  'book-architecture-silence',
+  'book-modern-typography',
+  'stat-brass-fountain-pen',
+  'book-spatial-craft',
+  'stat-linen-monolith-journal',
+  'stat-architect-desk-holder',
+  'stat-black-binder-set',
+  'book-botanical-index',
+  'book-enduring-object',
+  'stat-archival-sketchbook',
+  'book-quiet-geometry',
+]);
 
 interface CatalogContextType {
   catalog: CatalogItem[];
-  saveCatalog: (newItems: CatalogItem[]) => Promise<void>;
+  saveCatalog: (newItems: CatalogItem[], nextCustomCategories?: string[]) => Promise<void>;
+  ignouDatabase: IgnouDatabaseProgram[];
+  saveIgnouDatabase: (programs: IgnouDatabaseProgram[]) => Promise<void>;
+  categories: string[];
+  customCategories: string[];
+  addCustomCategory: (name: string) => Promise<void>;
+  removeCustomCategory: (name: string) => Promise<void>;
   cart: CartItem[];
   addToCart: (
     product: CatalogItem,
@@ -398,50 +325,213 @@ interface CatalogContextType {
   cartTotal: number;
   isCartOpen: boolean;
   setIsCartOpen: (open: boolean) => void;
+  userOrders: UserOrderRecord[];
+  addUserOrder: (order: UserOrderRecord) => void;
+  isOrdersOpen: boolean;
+  setIsOrdersOpen: (open: boolean) => void;
 }
 
 const CatalogContext = createContext<CatalogContextType | undefined>(undefined);
 
 const CART_STORAGE_KEY = 'lekhix_cart_v2';
+const ORDERS_STORAGE_KEY = 'lekhix_my_orders_v1';
+
+export function buildDefaultIgnouDatabase(): IgnouDatabaseProgram[] {
+  return IGNOU_ALL_PROGRAMMES.map((p) => {
+    const code = p.code.trim().toUpperCase();
+    const prepopulated = IGNOU_PREPOPULATED_PROGRAM_COURSES[code] || [];
+    return {
+      code,
+      title: p.title.trim(),
+      degree: p.degree,
+      courses: prepopulated.map((c) => ({ ...c })),
+    };
+  });
+}
+
+function normalizeIgnouDatabasePrograms(
+  rawPrograms: unknown
+): IgnouDatabaseProgram[] {
+  const validDegrees = new Set<IgnouDegree>(IGNOU_DEGREE_OPTIONS);
+  const validYears = new Set<IgnouYear>([
+    '1st Year',
+    '2nd Year',
+    '3rd Year',
+    '4th Year',
+  ]);
+
+  if (!Array.isArray(rawPrograms) || rawPrograms.length === 0) {
+    return buildDefaultIgnouDatabase();
+  }
+
+  const defaultProgrammeMap = new Map<string, IgnouProgrammeEntry>();
+  for (const defProg of IGNOU_ALL_PROGRAMMES) {
+    defaultProgrammeMap.set(defProg.code.trim().toUpperCase(), defProg);
+  }
+
+  const cleaned: IgnouDatabaseProgram[] = [];
+  const seenCodes = new Set<string>();
+
+  for (const item of rawPrograms) {
+    if (!item || typeof item !== 'object') continue;
+    const obj = item as Record<string, unknown>;
+    const code = typeof obj.code === 'string' ? obj.code.trim().toUpperCase() : '';
+    if (!code || seenCodes.has(code)) continue;
+    seenCodes.add(code);
+
+    const defProg = defaultProgrammeMap.get(code);
+    const degree: IgnouDegree = validDegrees.has(obj.degree as IgnouDegree)
+      ? (obj.degree as IgnouDegree)
+      : defProg?.degree || 'Bachelor Degree';
+
+    let title = typeof obj.title === 'string' ? obj.title.trim() : '';
+    if (
+      defProg &&
+      (!title ||
+        (code === 'BASKH' && title === 'Bachelor of Arts (Hons) Sanskrit') ||
+        (code === 'BAUDH' && title === 'Bachelor of Arts (Hons) URDU') ||
+        !title.includes('(') && defProg.title.includes('('))
+    ) {
+      title = defProg.title.trim();
+    }
+
+    const courses: IgnouCourseEntry[] = [];
+    const seenCourses = new Set<string>();
+    if (Array.isArray(obj.courses)) {
+      for (const c of obj.courses) {
+        if (!c || typeof c !== 'object') continue;
+        const cObj = c as Record<string, unknown>;
+        const cCode =
+          typeof cObj.code === 'string' ? cObj.code.trim().toUpperCase() : '';
+        if (!cCode) continue;
+        const cYear: IgnouYear = validYears.has(cObj.year as IgnouYear)
+          ? (cObj.year as IgnouYear)
+          : '1st Year';
+        const rawTitle = typeof cObj.title === 'string' ? cObj.title.trim() : '';
+        const cTitle = rawTitle || lookupIgnouCourseTitle(cCode) || cCode;
+        const key = `${cYear}::${normalizeCourseCodeKey(cCode)}`;
+        if (seenCourses.has(key)) continue;
+        seenCourses.add(key);
+        courses.push({
+          code: cCode,
+          title: cTitle,
+          year: cYear,
+        });
+      }
+    }
+
+    // Merge pre-populated default courses for this program if not already present
+    const prepopulated = IGNOU_PREPOPULATED_PROGRAM_COURSES[code];
+    if (prepopulated && prepopulated.length > 0) {
+      for (const pre of prepopulated) {
+        const key = `${pre.year}::${normalizeCourseCodeKey(pre.code)}`;
+        if (!seenCourses.has(key)) {
+          seenCourses.add(key);
+          courses.push({ ...pre });
+        }
+      }
+    }
+
+    cleaned.push({
+      code,
+      title,
+      degree,
+      courses,
+    });
+  }
+
+  // Ensure any missing default programmes from IGNOU_ALL_PROGRAMMES are also included
+  for (const defProg of IGNOU_ALL_PROGRAMMES) {
+    const defCode = defProg.code.trim().toUpperCase();
+    if (!seenCodes.has(defCode)) {
+      seenCodes.add(defCode);
+      const prepopulated = IGNOU_PREPOPULATED_PROGRAM_COURSES[defCode] || [];
+      cleaned.push({
+        code: defCode,
+        title: defProg.title.trim(),
+        degree: defProg.degree,
+        courses: prepopulated.map((c) => ({ ...c })),
+      });
+    }
+  }
+
+  return cleaned;
+}
+
+function stripUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .filter((v) => v !== undefined)
+      .map((v) => stripUndefinedDeep(v)) as unknown as T;
+  }
+  if (value !== null && typeof value === 'object') {
+    const cleaned: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== undefined && !(typeof v === 'number' && Number.isNaN(v))) {
+        cleaned[k] = stripUndefinedDeep(v);
+      }
+    }
+    return cleaned as T;
+  }
+  return value;
+}
 
 function normalizeCatalogItems(items: CatalogItem[]): CatalogItem[] {
-  const defaultMap = new Map(INITIAL_CATALOG.map((i) => [i.id, i]));
   return items
-    .filter((item) => item && typeof item.title === 'string')
+    .filter(
+      (item) =>
+        item &&
+        typeof item.id === 'string' &&
+        typeof item.title === 'string' &&
+        !LEGACY_DEMO_IDS.has(item.id)
+    )
     .map((item) => {
-      const seedMatch = defaultMap.get(item.id);
+      const reviewerName = item.specs?.reviewerName;
+      const reviewerQuote = item.specs?.reviewerQuote;
+      const category = (item.category || 'Books').trim() || 'Books';
+
       const safeSpecs: ProductSpecs = {
-        author: item.specs?.author || seedMatch?.specs.author || 'LEKHIX Editions',
-        publisher: item.specs?.publisher || seedMatch?.specs.publisher || 'LEKHIX Press',
-        releaseDate: item.specs?.releaseDate || seedMatch?.specs.releaseDate || '2026',
-        format: item.specs?.format || seedMatch?.specs.format || '6 × 9 in',
-        features: item.specs?.features || seedMatch?.specs.features || 'Archival Edition',
-        language: item.specs?.language || seedMatch?.specs.language || 'English',
-        isbn: item.specs?.isbn || seedMatch?.specs.isbn || '978-3-89955-000-0',
-        reviewerName: item.specs?.reviewerName ?? seedMatch?.specs.reviewerName,
-        reviewerQuote: item.specs?.reviewerQuote ?? seedMatch?.specs.reviewerQuote,
+        author: item.specs?.author || 'LEKHIX Editions',
+        publisher: item.specs?.publisher || 'LEKHIX Press',
+        releaseDate: item.specs?.releaseDate || '2026',
+        format: item.specs?.format || '6 × 9 in',
+        features: item.specs?.features || 'Archival Edition',
+        language: item.specs?.language || 'English',
+        isbn: item.specs?.isbn || '978-3-89955-000-0',
+        ...(reviewerName ? { reviewerName } : {}),
+        ...(reviewerQuote ? { reviewerQuote } : {}),
       };
 
-      if (item.category === 'Books') {
-        const bookFormat: BookFormat =
-          item.bookFormat || seedMatch?.bookFormat || 'ebook';
+      const cleanedImage =
+        item.image && item.image.startsWith('/catalog/') ? '' : item.image || '';
+
+      if (isBookLikeCategory(category)) {
+        const bookFormat: BookFormat = item.bookFormat || 'ebook';
         const ebookPrice =
           typeof item.ebookPrice === 'number' && item.ebookPrice > 0
             ? item.ebookPrice
             : bookFormat === 'ebook'
             ? Number(item.price)
-            : seedMatch?.ebookPrice || Math.round(Number(item.price) * 0.45);
-        return {
+            : Math.round(Number(item.price) * 0.5);
+        return stripUndefinedDeep({
           ...item,
+          category,
+          image: cleanedImage,
+          price: Number(item.price) || 0,
+          soldOut: Boolean(item.soldOut),
           specs: safeSpecs,
           bookFormat,
-          ebookPrice,
-        };
+          ...(bookFormat === 'physical' ? {} : { ebookPrice }),
+        });
       }
-      return {
+      return stripUndefinedDeep({
         ...item,
+        category,
+        image: cleanedImage,
+        price: Number(item.price) || 0,
+        soldOut: Boolean(item.soldOut),
         specs: safeSpecs,
-      };
+      });
     });
 }
 
@@ -454,10 +544,11 @@ function sanitizeStoredCart(raw: unknown): CartItem[] {
       typeof entry === 'object' &&
       entry.product &&
       typeof entry.product.id === 'string' &&
-      typeof entry.product.title === 'string'
+      typeof entry.product.title === 'string' &&
+      !LEGACY_DEMO_IDS.has(entry.product.id)
     ) {
       const normalizedProduct = normalizeCatalogItems([entry.product])[0];
-      if (normalizedProduct) {
+      if (normalizedProduct && !normalizedProduct.soldOut) {
         valid.push({
           product: normalizedProduct,
           quantity: Math.max(1, Number(entry.quantity) || 1),
@@ -472,8 +563,26 @@ function sanitizeStoredCart(raw: unknown): CartItem[] {
   return valid;
 }
 
+function sanitizeStoredOrders(raw: unknown): UserOrderRecord[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (entry): entry is UserOrderRecord =>
+      Boolean(
+        entry &&
+          typeof entry === 'object' &&
+          typeof (entry as UserOrderRecord).orderId === 'string' &&
+          typeof (entry as UserOrderRecord).amount === 'number' &&
+          Array.isArray((entry as UserOrderRecord).items)
+      )
+  );
+}
+
 export function CatalogProvider({ children }: { children: ReactNode }) {
   const [catalog, setCatalog] = useState<CatalogItem[]>(INITIAL_CATALOG);
+  const [ignouDatabase, setIgnouDatabase] = useState<IgnouDatabaseProgram[]>(() =>
+    buildDefaultIgnouDatabase()
+  );
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
   const [cart, setCart] = useState<CartItem[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
@@ -484,7 +593,31 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       return [];
     }
   });
+  const [userOrders, setUserOrders] = useState<UserOrderRecord[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const saved = localStorage.getItem(ORDERS_STORAGE_KEY);
+      if (!saved) return [];
+      return sanitizeStoredOrders(JSON.parse(saved));
+    } catch {
+      return [];
+    }
+  });
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isOrdersOpen, setIsOrdersOpen] = useState(false);
+
+  const categories = useMemo(() => {
+    const set = new Set<string>(DEFAULT_CATEGORIES);
+    for (const c of customCategories) {
+      if (c && c.trim()) set.add(c.trim());
+    }
+    for (const item of catalog) {
+      if (item.category && item.category.trim()) {
+        set.add(item.category.trim());
+      }
+    }
+    return Array.from(set);
+  }, [customCategories, catalog]);
 
   // Real-time Firestore listener for /appData/catalog
   useEffect(() => {
@@ -494,13 +627,51 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       (snap) => {
         if (snap.exists()) {
           const data = snap.data();
-          if (Array.isArray(data.items) && data.items.length > 0) {
-            setCatalog(normalizeCatalogItems(data.items));
+          if (Array.isArray(data.customCategories)) {
+            setCustomCategories(
+              data.customCategories
+                .filter((c: unknown): c is string => typeof c === 'string' && c.trim().length > 0)
+                .map((c: string) => c.trim())
+            );
           }
+          if (Array.isArray(data.items)) {
+            const cleaned = normalizeCatalogItems(data.items);
+            setCatalog(cleaned);
+            setCart((prevCart) =>
+              prevCart.filter((ci) => {
+                const match = cleaned.find((p) => p.id === ci.product.id);
+                return match && !match.soldOut;
+              })
+            );
+          }
+        } else {
+          setCatalog([]);
         }
       },
       (error) => {
-        console.warn('Using local seeded catalog fallback:', error.message);
+        console.warn('Catalog listener fallback:', error.message);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // Real-time Firestore listener for /appData/ignouDatabase
+  useEffect(() => {
+    const docRef = doc(db, 'appData', 'ignouDatabase');
+    const unsubscribe = onSnapshot(
+      docRef,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          if (Array.isArray(data.programs)) {
+            setIgnouDatabase(normalizeIgnouDatabasePrograms(data.programs));
+          }
+        } else {
+          setIgnouDatabase(buildDefaultIgnouDatabase());
+        }
+      },
+      (error) => {
+        console.warn('IGNOU database listener fallback:', error.message);
       }
     );
     return () => unsubscribe();
@@ -515,13 +686,43 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     }
   }, [cart]);
 
-  const saveCatalog = async (newItems: CatalogItem[]) => {
-    const normalized = normalizeCatalogItems(newItems);
+  // Persist userOrders to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(userOrders));
+    } catch (e) {
+      console.error('Failed to persist orders:', e);
+    }
+  }, [userOrders]);
+
+  const addUserOrder = (order: UserOrderRecord) => {
+    setUserOrders((prev) => [
+      order,
+      ...prev.filter((o) => o.orderId !== order.orderId),
+    ]);
+  };
+
+  const saveCatalog = async (
+    newItems: CatalogItem[],
+    nextCustomCategories?: string[]
+  ) => {
+    const normalized = stripUndefinedDeep(normalizeCatalogItems(newItems));
+    const resolvedCustom = stripUndefinedDeep(
+      (nextCustomCategories ?? customCategories)
+        .map((c) => c.trim())
+        .filter(
+          (c) =>
+            c.length > 0 &&
+            !DEFAULT_CATEGORIES.includes(c as (typeof DEFAULT_CATEGORIES)[number])
+        )
+    );
     setCatalog(normalized);
+    setCustomCategories(resolvedCustom);
     const path = 'appData/catalog';
     try {
       await setDoc(doc(db, 'appData', 'catalog'), {
         items: normalized,
+        customCategories: resolvedCustom,
         updatedAt: new Date().toISOString(),
       });
     } catch (error) {
@@ -529,11 +730,44 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const saveIgnouDatabase = async (programs: IgnouDatabaseProgram[]) => {
+    const normalized = stripUndefinedDeep(normalizeIgnouDatabasePrograms(programs));
+    setIgnouDatabase(normalized);
+    const path = 'appData/ignouDatabase';
+    try {
+      await setDoc(doc(db, 'appData', 'ignouDatabase'), {
+        programs: normalized,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
+  };
+
+  const addCustomCategory = async (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (
+      DEFAULT_CATEGORIES.some((d) => d.toLowerCase() === trimmed.toLowerCase()) ||
+      customCategories.some((c) => c.toLowerCase() === trimmed.toLowerCase())
+    ) {
+      return;
+    }
+    const next = [...customCategories, trimmed];
+    await saveCatalog(catalog, next);
+  };
+
+  const removeCustomCategory = async (name: string) => {
+    const next = customCategories.filter((c) => c !== name);
+    await saveCatalog(catalog, next);
+  };
+
   const addToCart = (
     product: CatalogItem,
     qty = 1,
     selectedFormat?: 'physical' | 'ebook'
   ) => {
+    if (product.soldOut) return;
     const format: 'physical' | 'ebook' =
       selectedFormat || getDefaultSelectedFormat(product);
 
@@ -600,6 +834,12 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
       value={{
         catalog,
         saveCatalog,
+        ignouDatabase,
+        saveIgnouDatabase,
+        categories,
+        customCategories,
+        addCustomCategory,
+        removeCustomCategory,
         cart,
         addToCart,
         removeFromCart,
@@ -609,6 +849,10 @@ export function CatalogProvider({ children }: { children: ReactNode }) {
         cartTotal,
         isCartOpen,
         setIsCartOpen,
+        userOrders,
+        addUserOrder,
+        isOrdersOpen,
+        setIsOrdersOpen,
       }}
     >
       {children}
